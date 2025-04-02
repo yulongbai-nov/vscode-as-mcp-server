@@ -6,7 +6,7 @@ import { DecorationController } from "./DecorationController";
 import { diagnosticsToProblemsString, getNewDiagnostics } from "./diagnostics";
 import { arePathsEqual } from "./path";
 
-export const DIFF_VIEW_URI_SCHEME = "mcp-diff"
+export const DIFF_VIEW_URI_SCHEME = "mcp-diff";
 
 export class DiffViewProvider {
   editType?: "create" | "modify"

@@ -5,7 +5,6 @@ import * as vscode from 'vscode';
 import { DiagnosticSeverity } from 'vscode';
 import { z, ZodRawShape } from 'zod';
 import packageJson from '../package.json';
-import { bashTool, bashToolSchema } from './tools/bash_tool';
 import { codeCheckerTool } from './tools/code_checker';
 import {
   listDebugSessions,
@@ -15,6 +14,7 @@ import {
   stopDebugSession,
   stopDebugSessionSchema,
 } from './tools/debug_tools';
+import { executeCommandSchema, executeCommandToolHandler } from './tools/execute_command';
 import { focusEditorTool } from './tools/focus_editor';
 import { listDirectorySchema, listDirectoryTool } from './tools/list_directory';
 import { textEditorSchema, textEditorTool } from './tools/text_editor';
@@ -42,6 +42,30 @@ export function createMcpServer(_outputChannel: vscode.OutputChannel): McpServer
 }
 
 function registerTools(mcpServer: McpServer) {
+  // Register the "execute_command" tool
+  mcpServer.tool(
+    'execute_command',
+    dedent`
+      Execute a command in a VSCode integrated terminal with proper shell integration.
+      This tool provides detailed output and exit status information, and supports:
+      - Custom working directory
+      - Shell integration for reliable output capture
+      - Output compression for large outputs
+      - Detailed exit status reporting
+    `.trim(),
+    executeCommandSchema.shape,
+    async (params) => {
+      const result = await executeCommandToolHandler(params);
+      return {
+        content: result.content.map(item => ({
+          ...item,
+          type: 'text' as const,
+        })),
+        isError: result.isError,
+      };
+    }
+  );
+
   // Register the "code_checker" tool
   mcpServer.tool(
     'code_checker',
@@ -168,6 +192,10 @@ function registerTools(mcpServer: McpServer) {
       - create: Create new file
       - insert: Insert text at specific line
       - undo_edit: Restore from backup
+
+      Code Editing Tips:
+      - VSCode may automatically prune unused imports when saving. To prevent this, make sure the imported type is
+        actually used in your code before adding the import.
     `.trim(),
     textEditorSchema.shape,
     async (params) => {
@@ -193,27 +221,6 @@ function registerTools(mcpServer: McpServer) {
     listDirectorySchema.shape,
     async (params) => {
       const result = await listDirectoryTool(params);
-      return {
-        content: result.content.map(item => ({
-          ...item,
-          type: 'text' as const,
-        })),
-        isError: result.isError,
-      };
-    }
-  );
-
-  // Register bash tool
-  mcpServer.tool(
-    'bash',
-    dedent`
-      Execute a bash command and return the output.
-      This tool allows running shell commands on the system.
-      Note: Use with caution as this executes commands directly on the host system.
-    `.trim(),
-    bashToolSchema.shape,
-    async (params) => {
-      const result = await bashTool(params);
       return {
         content: result.content.map(item => ({
           ...item,
