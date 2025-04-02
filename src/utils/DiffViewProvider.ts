@@ -398,21 +398,40 @@ export class DiffViewProvider {
   }
 
   getChangedRanges(): vscode.Range[] {
+    console.log('DiffViewProvider.getChangedRanges called', {
+      hasActiveDiffEditor: !!this.activeDiffEditor,
+      hasOriginalContent: !!this.originalContent,
+      originalContentLength: this.originalContent?.length
+    });
+
     if (!this.activeDiffEditor || !this.originalContent) {
+      console.log('DiffViewProvider.getChangedRanges - returning empty array (missing editor or content)');
       return [];
     }
 
     const currentContent = this.activeDiffEditor.document.getText();
+    console.log('Current content length:', currentContent.length);
+
     const diffs = diff.diffLines(this.originalContent, currentContent);
+    console.log('Diff parts:', diffs.length);
+
     const ranges: vscode.Range[] = [];
     let lineNumber = 0;
 
     for (const part of diffs) {
+      console.log('Diff part:', {
+        added: part.added,
+        removed: part.removed,
+        count: part.count,
+        value: part.value.substring(0, 20) + (part.value.length > 20 ? '...' : '')
+      });
+
       if (part.added || part.removed) {
         const range = new vscode.Range(
           new vscode.Position(lineNumber, 0),
           new vscode.Position(lineNumber + (part.count || 0), 0)
         );
+        console.log('Adding range:', `${range.start.line}-${range.end.line}`);
         ranges.push(range);
       }
       if (!part.removed) {
@@ -420,6 +439,7 @@ export class DiffViewProvider {
       }
     }
 
+    console.log('DiffViewProvider.getChangedRanges - returning ranges:', ranges.length);
     return ranges;
   }
 

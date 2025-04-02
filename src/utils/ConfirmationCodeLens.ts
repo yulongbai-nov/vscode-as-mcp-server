@@ -13,19 +13,33 @@ export class ConfirmationCodeLens implements vscode.CodeLensProvider {
   }
 
   public updateRanges(document: vscode.TextDocument, ranges: vscode.Range[]) {
+    console.log('ConfirmationCodeLens.updateRanges', {
+      document: document.uri.toString(),
+      ranges: ranges.length,
+      rangeDetails: ranges.map(r => `${r.start.line}-${r.end.line}`)
+    });
     this.document = document;
     this.ranges = ranges;
     this._onDidChangeCodeLenses.fire();
   }
 
   public clear() {
+    console.log('ConfirmationCodeLens.clear called');
     this.document = undefined;
     this.ranges = [];
     this._onDidChangeCodeLenses.fire();
   }
 
   async provideCodeLenses(document: vscode.TextDocument): Promise<vscode.CodeLens[]> {
+    console.log('ConfirmationCodeLens.provideCodeLenses', {
+      documentUri: document.uri.toString(),
+      storedDocumentUri: this.document?.uri.toString(),
+      storedRangesCount: this.ranges.length,
+      isMatching: this.document?.uri.toString() === document.uri.toString()
+    });
+
     if (this.document?.uri.toString() !== document.uri.toString() || this.ranges.length === 0) {
+      console.log('ConfirmationCodeLens.provideCodeLenses - returning empty array');
       return [];
     }
 
@@ -44,6 +58,7 @@ export class ConfirmationCodeLens implements vscode.CodeLensProvider {
       );
     }
 
+    console.log('ConfirmationCodeLens.provideCodeLenses - returning lens array:', this.codeLenses.length);
     return this.codeLenses;
   }
 }
