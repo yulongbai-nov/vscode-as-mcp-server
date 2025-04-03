@@ -41,52 +41,16 @@ export const activate = async (context: vscode.ExtensionContext) => {
     vscode.workspace.registerTextDocumentContentProvider(DIFF_VIEW_URI_SCHEME, diffContentProvider),
   );
 
-  // テキストエディタのコマンドを登録
+  // ステータスバーのコマンドを登録
   context.subscriptions.push(
-    vscode.commands.registerCommand('textEditor.applyChanges', () => {
-      vscode.commands.executeCommand('workbench.action.focusActiveEditorGroup');
+    vscode.commands.registerCommand('mcp.textEditor.applyChanges', () => {
+      vscode.commands.executeCommand('statusBar.applyChanges');
       return true;
     }),
-    vscode.commands.registerCommand('textEditor.cancelChanges', () => {
-      vscode.commands.executeCommand('workbench.action.focusActiveEditorGroup');
+    vscode.commands.registerCommand('mcp.textEditor.cancelChanges', () => {
+      vscode.commands.executeCommand('statusBar.cancelChanges');
       return false;
     })
-  );
-
-  // CodeLensプロバイダーを登録
-  context.subscriptions.push(
-    vscode.languages.registerCodeLensProvider(
-      { pattern: '**/*' },
-      new (class implements vscode.CodeLensProvider {
-        private _onDidChangeCodeLenses: vscode.EventEmitter<void> = new vscode.EventEmitter<void>();
-        readonly onDidChangeCodeLenses: vscode.Event<void> = this._onDidChangeCodeLenses.event;
-
-        async provideCodeLenses(document: vscode.TextDocument): Promise<vscode.CodeLens[]> {
-          const codeLenses: vscode.CodeLens[] = [];
-          const editor = vscode.window.activeTextEditor;
-
-          if (editor && editor.document === document) {
-            const range = new vscode.Range(
-              new vscode.Position(0, 0),
-              new vscode.Position(0, 0)
-            );
-
-            codeLenses.push(
-              new vscode.CodeLens(range, {
-                title: "✓ Apply Changes",
-                command: 'textEditor.applyChanges'
-              }),
-              new vscode.CodeLens(range, {
-                title: "✗ Cancel",
-                command: 'textEditor.cancelChanges'
-              })
-            );
-          }
-
-          return codeLenses;
-        }
-      })()
-    )
   );
 
   // Start server if configured to do so

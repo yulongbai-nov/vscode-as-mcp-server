@@ -13,6 +13,17 @@ export function registerVSCodeCommands(
     running: ServerState,
     startServer: (port: number) => Promise<void>
 ) {
+    // テキストエディタのアクションコマンドを登録
+    context.subscriptions.push(
+        vscode.commands.registerCommand('textEditor.applyChanges', () => {
+            vscode.commands.executeCommand('workbench.action.focusActiveEditorGroup');
+            return true;
+        }),
+        vscode.commands.registerCommand('textEditor.cancelChanges', () => {
+            vscode.commands.executeCommand('workbench.action.focusActiveEditorGroup');
+            return false;
+        })
+    );
     // COMMAND PALETTE COMMAND: Stop the MCP Server
     context.subscriptions.push(
         vscode.commands.registerCommand('mcpServer.stopServer', () => {
