@@ -1,6 +1,7 @@
 import * as vscode from "vscode"
 import { z } from "zod"
 import { TerminalManager } from "../integrations/terminal/TerminalManager"
+import { ConfirmationUI } from "../utils/confirmation_ui"
 import { formatResponse, ToolResponse } from "../utils/response"
 import { delay as setTimeoutPromise } from "../utils/time.js"
 
@@ -19,33 +20,24 @@ export class ExecuteCommandTool {
   }
 
   async execute(command: string, customCwd?: string): Promise<[boolean, ToolResponse]> {
+    // Ask for permission before executing the command
+    const userResponse = await this.ask(command);
+
+    // If user denied execution
+    if (userResponse !== "Approve") {
+      return [
+        false,
+        formatResponse.toolResult(`Command execution was denied by the user. ${userResponse !== "Deny" ? `Feedback: ${userResponse}` : ""}`)
+      ];
+    }
+
     const terminalInfo = await this.terminalManager.getOrCreateTerminal(customCwd || this.cwd)
     terminalInfo.terminal.show() // weird visual bug when creating new terminals (even manually) where there's an empty space at the top.
     const process = this.terminalManager.runCommand(terminalInfo, command)
 
-    let userFeedback: { text?: string; images?: string[] } | undefined
-    let didContinue = false
-    const sendCommandOutput = async (line: string): Promise<void> => {
-      try {
-        const response = await this.ask("command_output", line)
-        if (response === "Continue") {
-          // proceed while running
-        } else {
-          userFeedback = { text: response }
-        }
-        didContinue = true
-        process.continue() // continue past the await
-      } catch {
-        // This can only happen if this ask promise was ignored, so ignore this error
-      }
-    }
-
     let result = ""
     process.on("line", (line) => {
       result += line + "\n"
-      if (!didContinue) {
-        sendCommandOutput(line)
-      }
     })
 
     let completed = false
@@ -68,16 +60,6 @@ export class ExecuteCommandTool {
 
     result = result.trim()
 
-    if (userFeedback) {
-      return [
-        true,
-        formatResponse.toolResult(
-          `Command is still running in the user's terminal.${result.length > 0 ? `\nHere's the output so far:\n${result}` : ""
-          }\n\nThe user provided the following feedback:\n<feedback>\n${userFeedback.text}\n</feedback>`,
-        ),
-      ]
-    }
-
     if (completed) {
       return [false, formatResponse.toolResult(`Command executed.${result.length > 0 ? `\nOutput:\n${result}` : ""}`)]
     } else {
@@ -91,17 +73,8 @@ export class ExecuteCommandTool {
     }
   }
 
-  private async ask(type: string, line: string): Promise<string> {
-    if (type === "command_output") {
-      const response = await vscode.window.showInformationMessage(
-        line,
-        { modal: false },
-        { title: "Continue", isCloseAffordance: false },
-        { title: "Stop", isCloseAffordance: true }
-      )
-      return response?.title || "Continue"
-    }
-    throw new Error(`Unknown ask type: ${type}`)
+  private async ask(command: string): Promise<string> {
+    return await ConfirmationUI.confirm("Execute Command?", command, "Execute Command", "Deny");
   }
 }
 

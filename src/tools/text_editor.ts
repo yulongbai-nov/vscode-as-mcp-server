@@ -2,7 +2,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { z } from 'zod';
 import { DiffViewProvider } from '../utils/DiffViewProvider';
-import { StatusBarManager } from '../utils/StatusBarManager';
+import { ConfirmationUI } from '../utils/confirmation_ui';
 
 // Zodスキーマ定義
 export const textEditorSchema = z.object({
@@ -33,21 +33,11 @@ interface TextEditorResult {
 class EditorManager {
   private static instance: EditorManager;
   private diffViewProvider: DiffViewProvider;
-  private statusBarManager: StatusBarManager | null;
 
   private constructor() {
     console.log('EditorManager: Initializing...');
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
     this.diffViewProvider = new DiffViewProvider(workspaceRoot);
-
-    try {
-      // StatusBarManagerクラスの初期化
-      this.statusBarManager = new StatusBarManager();
-    } catch (error) {
-      console.error('Error initializing StatusBarManager:', error);
-      // エラーが発生してもEditorManagerのインスタンス化は続行
-      this.statusBarManager = null;
-    }
   }
 
   static getInstance(): EditorManager {
@@ -79,89 +69,22 @@ class EditorManager {
     return vscode.Uri.file(resolvedPath);
   }
 
-  // 確認プロンプトを表示する（設定に基づいてUI方法を選択）
-  private async showPersistentConfirmation(message: string): Promise<boolean> {
+  // 確認プロンプトを表示する
+  private async showPersistentConfirmation(message: string, approveLabel: string, denyLabel: string): Promise<boolean> {
     try {
       const editor = vscode.window.activeTextEditor;
       if (!editor) {
         throw new Error('No active text editor');
       }
 
-      // 設定から確認UI方法を取得
-      const config = vscode.workspace.getConfiguration('mcpServer');
-      const confirmationUI = config.get<string>('confirmationUI', 'statusBar');
+      console.log(`[EditorManager] Using ConfirmationUI for confirmation`);
 
-      console.log(`[EditorManager] Using ${confirmationUI} UI for confirmation`);
-
-      if (confirmationUI === 'quickPick') {
-        return await this.showQuickPickConfirmation(message);
-      } else {
-        return await this.showStatusBarConfirmation(message);
-      }
+      // ConfirmationUI を使用して確認
+      const result = await ConfirmationUI.confirm(message, "", approveLabel, denyLabel);
+      return result === "Approve";
     } catch (error) {
       console.error('Error showing confirmation:', error);
       return false;
-    }
-  }
-
-  // QuickPickを使用した確認方法
-  private async showQuickPickConfirmation(message: string): Promise<boolean> {
-    // ステータスバーにメッセージを表示
-    const statusBarItem = vscode.window.createStatusBarItem(
-      vscode.StatusBarAlignment.Right,
-      100
-    );
-    statusBarItem.text = "$(info) Review changes";
-    statusBarItem.tooltip = message;
-    statusBarItem.show();
-
-    try {
-      const options = [
-        { label: '$(check) Yes', description: 'Apply changes' },
-        { label: '$(x) No', description: 'Cancel changes' }
-      ];
-
-      const selected = await vscode.window.showQuickPick(options, {
-        placeHolder: message,
-        ignoreFocusOut: true
-      });
-
-      return selected?.label.includes('Yes') ?? false;
-    } finally {
-      statusBarItem.dispose();
-    }
-  }
-
-  // StatusBarManagerを使用した確認方法
-  private async showStatusBarConfirmation(message: string): Promise<boolean> {
-    // メッセージを表示
-    vscode.window.showInformationMessage(message);
-
-    // StatusBarManagerのインスタンスを使用
-    try {
-      return await this.askForApprovalChange();
-    } catch (error) {
-      console.error('Error using StatusBarManager:', error);
-      // エラーが発生した場合はQuickPickにフォールバック
-      console.log('[EditorManager] Falling back to QuickPick confirmation');
-      return await this.showQuickPickConfirmation(message);
-    }
-  }
-
-  // StatusBarManagerを使用した確認処理
-  private async askForApprovalChange(): Promise<boolean> {
-    if (!this.statusBarManager) {
-      throw new Error('StatusBarManager is not initialized');
-    }
-
-    try {
-      // askメソッドを使用してユーザーの選択を待機
-      console.log('[EditorManager] Calling statusBarManager.ask()');
-      const result = await this.statusBarManager.ask();
-      console.log('[EditorManager] statusBarManager.ask() returned:', result);
-      return result;
-    } finally {
-      this.statusBarManager.hide();
     }
   }
 
@@ -324,6 +247,8 @@ class EditorManager {
       console.log('EditorManager: Checking approval');
       const approved = skipDialog || await this.showPersistentConfirmation(
         'Do you want to apply these changes?',
+        'Apply Changes',
+        'Discard Changes'
       );
 
       if (!approved) {
@@ -402,6 +327,8 @@ class EditorManager {
       console.log('EditorManager: Checking approval');
       const approved = skipDialog || await this.showPersistentConfirmation(
         'Do you want to create this file?',
+        'Apply Changes',
+        'Discard Changes'
       );
 
       if (!approved) {
@@ -483,6 +410,8 @@ class EditorManager {
       console.log('EditorManager: Checking approval');
       const approved = skipDialog || await this.showPersistentConfirmation(
         'Do you want to insert this text?',
+        'Apply Changes',
+        'Discard Changes'
       );
 
       if (!approved) {
