@@ -41,7 +41,7 @@ const terminalManager = new TerminalManager(context);
 const process = terminalManager.runCommand('npm install', '/path/to/project');
 
 process.on('line', (line) => {
-    console.log(line);
+		console.log(line);
 });
 
 // To wait for the process to complete naturally:
@@ -134,9 +134,11 @@ export class TerminalManager {
 		// if shell integration is already active, run the command immediately
 		if (terminalInfo.terminal.shellIntegration) {
 			process.waitForShellIntegration = false
+			console.log(`Running command in terminal ${terminalInfo.id} with shell integration:`, command)
 			process.run(terminalInfo.terminal, command)
 		} else {
 			// docs recommend waiting 3s for shell integration to activate
+			console.log(`Waiting for shell integration in terminal ${terminalInfo.id}...`)
 			pWaitFor(() => terminalInfo.terminal.shellIntegration !== undefined, { timeout: 4000 }).finally(() => {
 				const existingProcess = this.processes.get(terminalInfo.id)
 				if (existingProcess && existingProcess.waitForShellIntegration) {

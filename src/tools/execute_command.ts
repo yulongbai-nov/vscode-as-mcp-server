@@ -3,11 +3,26 @@ import { z } from "zod"
 import { TerminalManager } from "../integrations/terminal/TerminalManager"
 import { ConfirmationUI } from "../utils/confirmation_ui"
 import { formatResponse, ToolResponse } from "../utils/response"
-import { delay as setTimeoutPromise } from "../utils/time.js"
+import { delay } from "../utils/time.js"
 
 export const executeCommandSchema = z.object({
   command: z.string().describe("The command to execute"),
   customCwd: z.string().optional().describe("Optional custom working directory for command execution"),
+  potentiallyDestructive: z.boolean().optional().default(true).describe(
+    "Flag indicating if the command is potentially destructive or modifying. Default is true. " +
+    "Set to false for read-only commands (like grep, find, ls) to skip user confirmation. " +
+    "Commands that could modify files or system state should keep this as true. " +
+    "Note: User can override this behavior with the mcpServer.confirmNonDestructiveCommands setting."
+  ),
+  background: z.boolean().optional().default(false).describe(
+    "Flag indicating if the command should run in the background without waiting for completion. " +
+    "When true, the tool will return immediately after starting the command. " +
+    "Default is false, which means the tool will wait for command completion."
+  ),
+  timeout: z.number().optional().default(300000).describe(
+    "Timeout in milliseconds after which the command execution will be considered complete for reporting purposes. " +
+    "Does not actually terminate the command. Default is 300000 (5 minutes)."
+  ),
 })
 
 export class ExecuteCommandTool {
@@ -19,16 +34,36 @@ export class ExecuteCommandTool {
     this.terminalManager = new TerminalManager()
   }
 
-  async execute(command: string, customCwd?: string): Promise<[boolean, ToolResponse]> {
-    // Ask for permission before executing the command
-    const userResponse = await this.ask(command);
+  async execute(
+    command: string,
+    customCwd?: string,
+    potentiallyDestructive: boolean = true,
+    background: boolean = false,
+    timeout: number = 300000
+  ): Promise<[userRejected: boolean, ToolResponse]> {
+    // Get setting for confirming non-destructive commands
+    const config = vscode.workspace.getConfiguration("mcpServer");
+    const confirmNonDestructiveCommands = config.get<boolean>("confirmNonDestructiveCommands", false);
 
-    // If user denied execution
-    if (userResponse !== "Approve") {
-      return [
-        false,
-        formatResponse.toolResult(`Command execution was denied by the user. ${userResponse !== "Deny" ? `Feedback: ${userResponse}` : ""}`)
-      ];
+    // Determine if we need to ask for confirmation
+    const shouldConfirm = potentiallyDestructive || confirmNonDestructiveCommands;
+
+    if (shouldConfirm) {
+      // Ask for permission based on either:
+      // 1. Command is potentially destructive OR
+      // 2. User has enabled confirmation for all commands
+      const userResponse = await this.ask(command);
+
+      // If user denied execution
+      if (userResponse !== "Approve") {
+        return [
+          false,
+          formatResponse.toolResult(`Command execution was denied by the user. ${userResponse !== "Deny" ? `Feedback: ${userResponse}` : ""}`)
+        ];
+      }
+    } else {
+      // For non-destructive commands when confirmation is disabled, log that we're skipping confirmation
+      console.log(`Executing read-only command without confirmation: ${command}`);
     }
 
     const terminalInfo = await this.terminalManager.getOrCreateTerminal(customCwd || this.cwd)
@@ -49,31 +84,57 @@ export class ExecuteCommandTool {
       await vscode.window.showWarningMessage("Shell integration is not available. Some features may be limited.")
     })
 
-    await process
+    // If background flag is set, don't wait for process completion
+    if (background) {
+      const terminalId = terminalInfo.id;
+      return [
+        false,
+        formatResponse.toolResult(
+          `Command started in background mode and is running in the terminal (id: ${terminalId}). ` +
+          `You can check the output later using the get_terminal_output tool with this terminal id.`
+        ),
+      ]
+    }
+
+    // Create a promise that resolves after the timeout
+    const timeoutPromise = new Promise<void>((resolve) => {
+      setTimeout(() => {
+        resolve();
+      }, timeout);
+    });
+
+    // Wait for either the process to complete or the timeout to occur
+    await Promise.race([process, timeoutPromise]);
 
     // Wait for a short delay to ensure all messages are sent to the webview
     // This delay allows time for non-awaited promises to be created and
     // for their associated messages to be sent to the webview, maintaining
     // the correct order of messages (although the webview is smart about
     // grouping command_output messages despite any gaps anyways)
-    await setTimeoutPromise(50)
+    await delay(50);
 
-    result = result.trim()
+    result = result.trim();
+
+    const terminalId = terminalInfo.id;
 
     if (completed) {
-      return [false, formatResponse.toolResult(`Command executed.${result.length > 0 ? `\nOutput:\n${result}` : ""}`)]
+      return [false, formatResponse.toolResult(
+        `Command executed in terminal (id: ${terminalId}).${result ? `\nOutput:\n${result}` : ""}`
+      )]
     } else {
+      // If we got here and it's not completed, it's either still running or hit the timeout
+      const timeoutMessage = timeout !== 300000 ? ` (timeout: ${timeout}ms)` : "";
       return [
         false,
         formatResponse.toolResult(
-          `Command is still running in the user's terminal.${result.length > 0 ? `\nHere's the output so far:\n${result}` : ""
-          }\n\nYou will be updated on the terminal status and new output in the future.`
+          `Command is still running in terminal (id: ${terminalId})${timeoutMessage}.${result ? `\nHere's the output so far:\n${result}` : ""
+          }\n\nYou can check for more output later using the get_terminal_output tool with this terminal id.`
         ),
       ]
     }
   }
 
-  private async ask(command: string): Promise<string> {
+  protected async ask(command: string): Promise<string> {
     return await ConfirmationUI.confirm("Execute Command?", command, "Execute Command", "Deny");
   }
 }
@@ -88,7 +149,13 @@ export async function executeCommandToolHandler(params: z.infer<typeof executeCo
   }
 
   const tool = new ExecuteCommandTool(workspaceRoot);
-  const [success, response] = await tool.execute(params.command, params.customCwd);
+  const [success, response] = await tool.execute(
+    params.command,
+    params.customCwd,
+    params.potentiallyDestructive,
+    params.background,
+    params.timeout
+  );
 
   return {
     isError: !success,

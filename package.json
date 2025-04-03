@@ -51,6 +51,11 @@
           "enum": ["statusBar", "quickPick"],
           "default": "statusBar",
           "description": "The UI to use for confirming changes: status bar buttons or quick pick dialog."
+        },
+        "mcpServer.confirmNonDestructiveCommands": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, even commands marked as non-destructive (potentiallyDestructive=false) will require user confirmation."
         }
       }
     }

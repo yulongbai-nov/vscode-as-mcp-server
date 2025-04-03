@@ -16,6 +16,7 @@ import {
 } from './tools/debug_tools';
 import { executeCommandSchema, executeCommandToolHandler } from './tools/execute_command';
 import { focusEditorTool } from './tools/focus_editor';
+import { getTerminalOutputSchema, getTerminalOutputToolHandler } from './tools/get_terminal_output';
 import { listDirectorySchema, listDirectoryTool } from './tools/list_directory';
 import { textEditorSchema, textEditorTool } from './tools/text_editor';
 
@@ -52,6 +53,7 @@ function registerTools(mcpServer: McpServer) {
       - Shell integration for reliable output capture
       - Output compression for large outputs
       - Detailed exit status reporting
+      - Flag for potentially destructive commands (potentiallyDestructive: false to skip confirmation for read-only commands)
     `.trim(),
     executeCommandSchema.shape,
     async (params) => {
@@ -221,6 +223,28 @@ function registerTools(mcpServer: McpServer) {
     listDirectorySchema.shape,
     async (params) => {
       const result = await listDirectoryTool(params);
+      return {
+        content: result.content.map(item => ({
+          ...item,
+          type: 'text' as const,
+        })),
+        isError: result.isError,
+      };
+    }
+  );
+
+  // Register get terminal output tool
+  mcpServer.tool(
+    'get_terminal_output',
+    dedent`
+      Retrieve the output from a specific terminal by its ID.
+      This tool allows you to check the current or historical output of a terminal,
+      which is particularly useful when working with long-running commands or
+      commands started in background mode with the execute_command tool.
+    `.trim(),
+    getTerminalOutputSchema.shape,
+    async (params: z.infer<typeof getTerminalOutputSchema>) => {
+      const result = await getTerminalOutputToolHandler(params);
       return {
         content: result.content.map(item => ({
           ...item,
