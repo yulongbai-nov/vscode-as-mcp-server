@@ -1,9 +1,12 @@
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { McpServer, ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { ListResourcesRequestSchema, ReadResourceRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol';
+import { CallToolRequestSchema, CallToolResult, ErrorCode, ListResourcesRequestSchema, ListToolsRequestSchema, ListToolsResult, McpError, ReadResourceRequestSchema, Tool } from '@modelcontextprotocol/sdk/types.js';
 import dedent from 'dedent';
 import * as vscode from 'vscode';
 import { DiagnosticSeverity } from 'vscode';
-import { z, ZodRawShape } from 'zod';
+import { AnyZodObject, z, ZodRawShape } from 'zod';
+import { zodToJsonSchema } from "zod-to-json-schema";
 import packageJson from '../package.json';
 import { codeCheckerTool } from './tools/code_checker';
 import {
@@ -18,10 +21,152 @@ import { executeCommandSchema, executeCommandToolHandler } from './tools/execute
 import { focusEditorTool } from './tools/focus_editor';
 import { getTerminalOutputSchema, getTerminalOutputToolHandler } from './tools/get_terminal_output';
 import { listDirectorySchema, listDirectoryTool } from './tools/list_directory';
+import { registerCopilotTools } from './tools/register_copilot_tools';
 import { textEditorSchema, textEditorTool } from './tools/text_editor';
 
 export const extensionName = 'vscode-mcp-server';
 export const extensionDisplayName = 'VSCode MCP Server';
+
+interface RegisteredTool {
+  description?: string;
+  inputZodSchema?: AnyZodObject;
+  inputSchema?: Tool['inputSchema'];
+  callback: ToolCallback<undefined | ZodRawShape>;
+};
+
+export class ToolRegistry {
+  private _registeredTools: { [name: string]: RegisteredTool } = {};
+  private _toolHandlersInitialized = false;
+  constructor(readonly server: Server) { }
+  toolWithRawInputSchema(
+    name: string,
+    description: string,
+    inputSchema: Tool['inputSchema'],
+    cb: (args: unknown, extra: RequestHandlerExtra) => ReturnType<ToolCallback<any>>,
+  ) {
+    if (this._registeredTools[name]) {
+      throw new Error(`Tool ${name} is already registered`);
+    }
+
+    this._registeredTools[name] = {
+      description,
+      inputSchema,
+      callback: cb,
+    };
+
+    this.#setToolRequestHandlers();
+  }
+  tool<Args extends ZodRawShape>(
+    name: string,
+    description: string,
+    paramsSchema: Args,
+    cb: ToolCallback<Args>,
+  ) {
+    if (this._registeredTools[name]) {
+      throw new Error(`Tool ${name} is already registered`);
+    }
+
+    this._registeredTools[name] = {
+      description,
+      inputZodSchema:
+        paramsSchema === undefined ? undefined : z.object(paramsSchema),
+      callback: cb,
+    };
+
+    this.#setToolRequestHandlers();
+  }
+  #setToolRequestHandlers() {
+    if (this._toolHandlersInitialized) {
+      return;
+    }
+
+    this.server.assertCanSetRequestHandler(
+      ListToolsRequestSchema.shape.method.value,
+    );
+    this.server.assertCanSetRequestHandler(
+      CallToolRequestSchema.shape.method.value,
+    );
+
+    this.server.registerCapabilities({
+      tools: {},
+    });
+
+    this.server.setRequestHandler(ListToolsRequestSchema, (): ListToolsResult => ({
+      tools: Object.entries(this._registeredTools).map(([name, tool]): Tool => ({
+        name,
+        description: tool.description,
+        inputSchema: tool.inputSchema
+          ?? (tool.inputZodSchema && (zodToJsonSchema(tool.inputZodSchema, {
+            strictUnions: true,
+          }) as Tool["inputSchema"]))
+          ?? { type: "object" as const },
+      })),
+    }));
+
+    this.server.setRequestHandler(
+      CallToolRequestSchema,
+      async (request, extra): Promise<CallToolResult> => {
+        const tool = this._registeredTools[request.params.name];
+        if (!tool) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            `Tool ${request.params.name} not found`,
+          );
+        }
+
+        if (tool.inputSchema) {
+          // Skip validation because raw inputschema tool is used by another tool provider
+          const args = request.params.arguments;
+          const cb = tool.callback as (args: unknown, extra: RequestHandlerExtra) => ReturnType<ToolCallback<any>>;
+          return await Promise.resolve(cb(args, extra));
+        } else if (tool.inputZodSchema) {
+          const parseResult = await tool.inputZodSchema.safeParseAsync(
+            request.params.arguments,
+          );
+          if (!parseResult.success) {
+            throw new McpError(
+              ErrorCode.InvalidParams,
+              `Invalid arguments for tool ${request.params.name}: ${parseResult.error.message}`,
+            );
+          }
+
+          const args = parseResult.data;
+          const cb = tool.callback as ToolCallback<ZodRawShape>;
+          try {
+            return await Promise.resolve(cb(args, extra));
+          } catch (error) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: error instanceof Error ? error.message : String(error),
+                },
+              ],
+              isError: true,
+            };
+          }
+        } else {
+          const cb = tool.callback as ToolCallback<undefined>;
+          try {
+            return await Promise.resolve(cb(extra));
+          } catch (error) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: error instanceof Error ? error.message : String(error),
+                },
+              ],
+              isError: true,
+            };
+          }
+        }
+      },
+    );
+
+    this._toolHandlersInitialized = true;
+  }
+}
 
 export function createMcpServer(_outputChannel: vscode.OutputChannel): McpServer {
   const mcpServer = new McpServer({
@@ -34,15 +179,17 @@ export function createMcpServer(_outputChannel: vscode.OutputChannel): McpServer
     },
   });
 
+  const toolRegistry = new ToolRegistry(mcpServer.server);
+
   // Register tools
-  registerTools(mcpServer);
+  registerTools(toolRegistry);
   // Register resource handlers
   registerResourceHandlers(mcpServer);
 
   return mcpServer;
 }
 
-function registerTools(mcpServer: McpServer) {
+function registerTools(mcpServer: ToolRegistry) {
   // Register the "execute_command" tool
   mcpServer.tool(
     'execute_command',
@@ -254,6 +401,9 @@ function registerTools(mcpServer: McpServer) {
       };
     }
   );
+
+  // Register all Copilot tools
+  registerCopilotTools(mcpServer);
 }
 
 function registerResourceHandlers(mcpServer: McpServer) {
@@ -300,16 +450,16 @@ function registerResourceHandlers(mcpServer: McpServer) {
   });
 }
 
-interface Tool<Args extends ZodRawShape> {
-  name: string;
-  description: string;
-  paramsSchema: Args;
-  cb: ToolCallback<Args>;
-}
-
-export class McpServerHelper {
-  tools: Tool<any>[] = [];
-  tool<Args extends ZodRawShape>(name: string, description: string, paramsSchema: Args, cb: ToolCallback<Args>) {
-    this.tools.push({ name, description, paramsSchema, cb });
-  }
-}
+// interface Tool<Args extends ZodRawShape> {
+//   name: string;
+//   description: string;
+//   paramsSchema: Args;
+//   cb: ToolCallback<Args>;
+// }
+//
+// export class McpServerHelper {
+//   tools: Tool<any>[] = [];
+//   tool<Args extends ZodRawShape>(name: string, description: string, paramsSchema: Args, cb: ToolCallback<Args>) {
+//     this.tools.push({ name, description, paramsSchema, cb });
+//   }
+// }

@@ -31,6 +31,10 @@
       {
         "command": "mcpServer.setPort",
         "title": "MCP Server: Set Port"
+      },
+      {
+        "command": "mcpServer.toggleActiveStatus",
+        "title": "MCP Server: Toggle Active Status"
       }
     ],
     "configuration": {
@@ -48,7 +52,10 @@
         },
         "mcpServer.confirmationUI": {
           "type": "string",
-          "enum": ["statusBar", "quickPick"],
+          "enum": [
+            "statusBar",
+            "quickPick"
+          ],
           "default": "statusBar",
           "description": "The UI to use for confirming changes: status bar buttons or quick pick dialog."
         },
@@ -62,17 +69,17 @@
   },
   "main": "./dist/extension.js",
   "scripts": {
-    "vscode:prepublish": "npm run package",
+    "vscode:prepublish": "pnpm package",
     "package-extension": "cross-env npm_config_user_agent=pnpm vsce package",
-    "compile": "npm run check-types && node build.js",
+    "compile": "pnpm check-types && node build.js",
     "check-types": "tsc --noEmit",
     "watch": "npm-run-all -p watch:*",
     "watch:esbuild": "node build.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
     "compile-tests": "node build.js --test",
-    "pretest": "npm run compile-tests",
+    "pretest": "pnpm compile-tests",
     "test": "vscode-test",
-    "package": "npm run check-types && node build.js --production"
+    "package": "pnpm check-types && node build.js --production"
   },
   "devDependencies": {
     "@types/diff": "^7.0.1",
@@ -80,16 +87,13 @@
     "@types/mocha": "^10.0.10",
     "@types/node": "~22.13.10",
     "@types/pdf-parse": "^1.1.4",
+    "@types/sinon": "^17.0.4",
     "@types/vscode": "^1.98.0",
-    "@typescript-eslint/eslint-plugin": "^8.22.0",
-    "@typescript-eslint/parser": "^8.22.0",
     "@vscode/test-cli": "^0.0.10",
     "@vscode/test-electron": "^2.4.1",
     "@vscode/vsce": "^3.3.0",
     "cross-env": "^7.0.3",
-    "eslint": "^9.19.0",
-    "eslint-plugin-import": "^2.31.0",
-    "prettier": "^3.5.3",
+    "sinon": "^20.0.0",
     "ts-loader": "^9.5.2",
     "typescript": "^5.8.2",
     "webpack": "^5.97.1",
@@ -108,14 +112,6 @@
     "p-wait-for": "^5.0.2",
     "pdf-parse": "^1.1.1",
     "strip-bom": "^5.0.0"
-  },
-  "eslintConfig": {
-    "plugins": [
-      "prettier"
-    ],
-    "rules": {
-      "prettier/prettier": "error"
-    }
   },
   "packageManager": "pnpm@10.6.1+sha512.40ee09af407fa9fbb5fbfb8e1cb40fbb74c0af0c3e10e9224d7b53c7658528615b2c92450e74cfad91e3a2dcafe3ce4050d80bda71d757756d2ce2b66213e9a3"
 }

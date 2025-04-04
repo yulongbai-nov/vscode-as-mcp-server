@@ -10,8 +10,9 @@ export function registerVSCodeCommands(
     context: vscode.ExtensionContext,
     mcpServer: McpServer,
     outputChannel: vscode.OutputChannel,
-    running: ServerState,
-    startServer: (port: number) => Promise<void>
+    startServer: (port: number) => Promise<void>,
+    updateStatusBar: (isRunning: boolean, isActive: boolean) => void,
+    running: boolean
 ) {
     // テキストエディタのアクションコマンドを登録
     context.subscriptions.push(
@@ -27,20 +28,21 @@ export function registerVSCodeCommands(
     // COMMAND PALETTE COMMAND: Stop the MCP Server
     context.subscriptions.push(
         vscode.commands.registerCommand('mcpServer.stopServer', () => {
-            if (!running.value) {
+            if (!running) {
                 vscode.window.showWarningMessage('MCP Server is not running.');
                 outputChannel.appendLine('Attempted to stop the MCP Server, but it is not running.');
                 return;
             }
             mcpServer.close();
-            running.value = false;
+            running = false;
+            updateStatusBar(false, false);
         }),
     );
 
     // COMMAND PALETTE COMMAND: Start the MCP Server
     context.subscriptions.push(
         vscode.commands.registerCommand('mcpServer.startServer', async () => {
-            if (running.value) {
+            if (running) {
                 vscode.window.showWarningMessage('MCP Server is already running.');
                 outputChannel.appendLine('Attempted to start the MCP Server, but it is already running.');
                 return;
