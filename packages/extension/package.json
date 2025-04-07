@@ -1,20 +1,14 @@
 {
-  "name": "mcp-server-vscode",
-  "displayName": "VSCode MCP Server",
-  "publisher": "SemanticWorkbenchTeam",
-  "description": "VSCode tools and resources as a Model Context Protocol (MCP) server in a VSCode extension.",
-  "version": "0.0.9",
+  "name": "vscode-as-mcp-server",
+  "displayName": "VSCode as MCP Server",
+  "description": "Expose VSCode features such as file viewing and editing as MCP, enabling the LLM to access these functionalities.",
+  "publisher": "acomagu",
+  "version": "0.0.25",
   "type": "commonjs",
+  "icon": "icon.png",
   "engines": {
-    "vscode": "^1.96.0"
+    "vscode": "^1.98.0"
   },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/microsoft/semanticworkbench"
-  },
-  "categories": [
-    "Other"
-  ],
   "activationEvents": [
     "onStartupFinished"
   ],
@@ -27,10 +21,6 @@
       {
         "command": "mcpServer.startServer",
         "title": "MCP Server: Start Server"
-      },
-      {
-        "command": "mcpServer.setPort",
-        "title": "MCP Server: Set Port"
       },
       {
         "command": "mcpServer.toggleActiveStatus",
@@ -47,7 +37,7 @@
         },
         "mcpServer.port": {
           "type": "number",
-          "default": 6010,
+          "default": 60100,
           "description": "The port that the MCP Server listens on. Set in case of conflicts or custom configurations."
         },
         "mcpServer.confirmationUI": {
@@ -56,13 +46,13 @@
             "statusBar",
             "quickPick"
           ],
-          "default": "statusBar",
+          "default": "quickPick",
           "description": "The UI to use for confirming changes: status bar buttons or quick pick dialog."
         },
         "mcpServer.confirmNonDestructiveCommands": {
           "type": "boolean",
           "default": false,
-          "description": "If true, even commands marked as non-destructive (potentiallyDestructive=false) will require user confirmation."
+          "description": "If true, even commands marked as non-destructive (modifySomething=false) will require user confirmation."
         }
       }
     }
@@ -70,7 +60,7 @@
   "main": "./dist/extension.js",
   "scripts": {
     "vscode:prepublish": "pnpm package",
-    "package-extension": "cross-env npm_config_user_agent=pnpm vsce package",
+    "package-extension": "cross-env npm_config_user_agent=pnpm vsce package --no-dependencies",
     "compile": "pnpm check-types && node build.js",
     "check-types": "tsc --noEmit",
     "watch": "npm-run-all -p watch:*",
@@ -91,7 +81,7 @@
     "@types/vscode": "^1.98.0",
     "@vscode/test-cli": "^0.0.10",
     "@vscode/test-electron": "^2.4.1",
-    "@vscode/vsce": "^3.3.0",
+    "@vscode/vsce": "^3.3.2",
     "cross-env": "^7.0.3",
     "sinon": "^20.0.0",
     "ts-loader": "^9.5.2",
@@ -105,7 +95,6 @@
     "diff": "^7.0.0",
     "esbuild": "^0.25.1",
     "express": "^4.21.2",
-    "get-port": "^7.1.0",
     "ignore": "^7.0.3",
     "isbinaryfile": "^5.0.4",
     "mammoth": "^1.9.0",

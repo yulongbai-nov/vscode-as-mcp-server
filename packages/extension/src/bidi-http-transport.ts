@@ -1,54 +1,31 @@
 import { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
 import express from 'express';
+import * as http from 'node:http';
 import * as vscode from 'vscode';
 
 export class BidiHttpTransport implements Transport {
   onclose?: () => void;
   onerror?: (error: Error) => void;
   onmessage?: (message: JSONRPCMessage) => void;
-  private clientUrls: Set<string> = new Set();
-  public actualPort: number = 0;
-  public isActiveServer: boolean = false;
+  onServerStatusChanged?: (status: 'running' | 'stopped' | 'starting' | 'tool_list_updated') => void;
+  #serverStatus: 'running' | 'stopped' | 'starting' | 'tool_list_updated' = 'stopped';
+  private pendingResponses = new Map<string | number, (resp: JSONRPCMessage) => void>();
+  private httpServer?: http.Server; // Express server instance
 
-  // requestActive メソッドを追加
-  async requestActive(): Promise<boolean> {
-    this.outputChannel.appendLine('Requesting active server status');
-    try {
-      // HTTP POSTリクエストを送信して、アクティブステータスをリクエスト
-      const results = await Promise.all([...this.clientUrls].map(async clientUrl => {
-        const response = await fetch(`${clientUrl}/request-active`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ serverUrl: `http://localhost:${this.actualPort}` }),
-        });
+  public get isServerRunning(): boolean {
+    return this.serverStatus === 'running';
+  }
 
-        if (!response.ok) {
-          console.error(`HTTP ${response.status}: ${await response.text()}`);
-          return false;
-        }
-
-        // success: true が返ってきた場合にアクティブとする
-        const resp = await response.json() as { success?: boolean };
-        return resp.success;
-      }));
-
-      const ok = results.some(r => r);
-
-      if (ok) {
-        this.isActiveServer = true;
-        this.outputChannel.appendLine('Server is now active');
-        return true;
-      } else {
-        this.outputChannel.appendLine('Server could not become active');
-        return false;
-      }
-    } catch (err) {
-      this.outputChannel.appendLine(`Error requesting active status: ${err}`);
-      return false;
+  private set serverStatus(status: 'running' | 'stopped' | 'starting' | 'tool_list_updated') {
+    this.#serverStatus = status;
+    if (this.onServerStatusChanged) {
+      this.onServerStatusChanged(status);
     }
+  }
+
+  public get serverStatus(): 'running' | 'stopped' | 'starting' | 'tool_list_updated' {
+    return this.#serverStatus;
   }
 
   constructor(
@@ -56,160 +33,193 @@ export class BidiHttpTransport implements Transport {
     private readonly outputChannel: vscode.OutputChannel
   ) { }
 
+  async requestHandover(): Promise<boolean> {
+    this.outputChannel.appendLine('Requesting server handover');
+
+    // Notify that we're requesting handover
+    this.serverStatus = 'starting';
+
+    try {
+      // 現在のサーバーに対してハンドオーバーリクエストを送信
+      const response = await fetch(`http://localhost:${this.listenPort}/request-handover`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const data = await response.json() as { success: boolean };
+
+      if (data.success) {
+        this.outputChannel.appendLine('Handover request accepted');
+
+        // ハンドオーバーが成功したら、1秒待ってからサーバーを再起動する
+        this.outputChannel.appendLine('Waiting 1 second before starting server...');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        try {
+          await this.start();
+          this.outputChannel.appendLine('Server restarted after successful handover');
+          return true;
+        } catch (startErr) {
+          const startErrorMessage = startErr instanceof Error ? startErr.message : String(startErr);
+          this.outputChannel.appendLine(`Failed to restart server after handover: ${startErrorMessage}`);
+          return false;
+        }
+      } else {
+        this.outputChannel.appendLine('Handover request rejected');
+        return false;
+      }
+    } catch (err) {
+      // エラーが発生した場合（サーバーが起動していない場合など）
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      this.outputChannel.appendLine(`Handover request failed: ${errorMessage}`);
+
+      // ハンドオーバーリクエストが失敗した場合も、1秒待ってからサーバーを起動してみる
+      this.outputChannel.appendLine('Waiting 1 second before starting server...');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      try {
+        await this.start();
+        this.outputChannel.appendLine('Server started after failed handover request');
+        return true;
+      } catch (startErr) {
+        const startErrorMessage = startErr instanceof Error ? startErr.message : String(startErr);
+        this.outputChannel.appendLine(`Failed to start server: ${startErrorMessage}`);
+        return false;
+      }
+    }
+  }
+
   async start(): Promise<void> {
+    this.serverStatus = 'starting';
+
     const app = express();
 
     app.get('/ping', (_req: express.Request, res: express.Response) => {
       this.outputChannel.appendLine('Received ping request');
-      res.send({ status: 'ok', timestamp: new Date().toISOString() });
+      const response = {
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        serverRunning: this.isServerRunning
+      };
+
+      res.send(response);
     });
 
-    app.post('/register', express.json(), async (req: express.Request, res: express.Response) => {
-      this.outputChannel.appendLine('Received registration request: ' + JSON.stringify(req.body));
-      try {
-        const { clientUrl } = req.body;
-        if (!clientUrl) {
-          res.status(400).send('clientUrl is required');
-          return;
-        }
-        this.clientUrls.add(clientUrl);
-        this.outputChannel.appendLine('New client URL added: ' + clientUrl);
-        this.outputChannel.appendLine(`Total connected clients: ${this.clientUrls.size}`);
-        res.send({ status: 'registered', clientCount: this.clientUrls.size });
-      } catch (err) {
-        this.outputChannel.appendLine('Error handling registration request: ' + err);
-        res.status(500).send('Internal Server Error');
+    // Endpoint to handle handover requests
+    app.post('/request-handover', express.json(), (_req: express.Request, res: express.Response) => {
+      this.outputChannel.appendLine('Received handover request');
+
+      // Accept the handover request
+      res.send({ success: true });
+
+      // Actually stop the server
+      if (this.httpServer) {
+        this.outputChannel.appendLine('Stopping server due to handover request');
+        this.httpServer.close();
+        this.httpServer = undefined;
       }
+
+      // Set server to not running after sending response
+      this.serverStatus = 'stopped';
+
+      this.outputChannel.appendLine('Server is now not running due to handover request');
     });
 
-    // アクティブサーバー変更通知を処理するエンドポイント
-    app.post('/active-server-changed', express.json(), async (req: express.Request, res: express.Response) => {
-      this.outputChannel.appendLine('Received active server changed notification: ' + JSON.stringify(req.body));
-      try {
-        const { activeServerUrl } = req.body;
-        if (!activeServerUrl) {
-          res.status(400).send('activeServerUrl is required');
-          return;
-        }
+    app.post('/notify-tools-updated', express.json(), (_req: express.Request, res: express.Response) => {
+      this.outputChannel.appendLine('Received tools updated notification');
+      vscode.window.showWarningMessage('The Tool List has been updated. Please restart the MCP Client (e.g., Claude Desktop) to notify it of the new Tool List. (For Claude Desktop, click the top hamburger menu -> File -> Exit.)');
+      this.serverStatus = 'tool_list_updated';
 
-        // 自分のURLと比較して、自分がアクティブかどうかを判断
-        const myUrl = `http://localhost:${this.actualPort}`;
-        const isThisServerActive = activeServerUrl === myUrl;
-
-        // アクティブ状態を更新
-        this.isActiveServer = isThisServerActive;
-        this.outputChannel.appendLine(`Server active status updated: ${this.isActiveServer ? 'active' : 'inactive'}`);
-
-        res.send({ success: true });
-      } catch (err) {
-        this.outputChannel.appendLine('Error handling active server changed notification: ' + err);
-        res.status(500).send('Internal Server Error');
-      }
+      res.send({ success: true });
     });
 
     app.post('/', express.json(), async (req: express.Request, res: express.Response) => {
       this.outputChannel.appendLine('Received message: ' + JSON.stringify(req.body));
       try {
-        this.onmessage!(req.body);
-        res.send('OK');
+        const message = req.body as JSONRPCMessage;
+
+        if (this.serverStatus === 'tool_list_updated' && (message as { method: string }).method === 'tools/list') {
+          this.serverStatus = 'running';
+        }
+
+        if (this.onmessage) {
+          if ('id' in message) {
+            // Create a new promise for the response
+            const responsePromise = new Promise<JSONRPCMessage>((resolve) => {
+              this.pendingResponses.set(message.id, resolve);
+            });
+            // Handle the request and wait for response
+            this.onmessage(message);
+            const resp = await responsePromise;
+            res.send(resp);
+          } else {
+            // Handle the request without waiting for response
+            this.onmessage(message);
+            res.send('{ "success": true }');
+          }
+        } else {
+          res.status(500).send('No message handler');
+        }
       } catch (err) {
         this.outputChannel.appendLine('Error handling message: ' + err);
         res.status(500).send('Internal Server Error');
       }
     });
 
-    // Try to listen on ports starting from listenPort up to listenPort+10
-    let currentPort = this.listenPort;
-    const maxPort = this.listenPort + 10;
-
+    // Only try to listen on the specified port
     const startServer = (port: number): Promise<number> => {
+      console.trace('Starting server on port: ' + port);
       return new Promise((resolve, reject) => {
         const server = app.listen(port)
-          .on('listening', () => {
+          .once('listening', () => {
+            this.httpServer = server; // Store server instance
             this.outputChannel.appendLine(`MCP Server running at :${port}`);
             resolve(port);
           })
-          .on('error', (err: NodeJS.ErrnoException) => {
-            if (err.code === 'EADDRINUSE' && port < maxPort) {
-              this.outputChannel.appendLine(`Port ${port} is in use, trying ${port + 1}`);
-              server.close();
-              resolve(0); // Signal to try next port
-            } else {
-              reject(err);
-            }
+          .once('error', (err: NodeJS.ErrnoException) => {
+            this.outputChannel.appendLine(`Failed to listen on port ${port}: ${err.message}`);
+            reject(err);
           });
       });
     };
 
-    while (currentPort <= maxPort) {
-      try {
-        const boundPort = await startServer(currentPort);
-        if (boundPort > 0) {
-          // Successfully bound to a port
-          this.actualPort = boundPort;
-          return;
-        }
-        // Try next port
-        currentPort++;
-      } catch (err) {
-        this.outputChannel.appendLine(`Failed to start server: ${err}`);
-        throw err;
-      }
-    }
+    try {
+      await startServer(this.listenPort);
 
-    throw new Error(`Failed to bind to any port in range ${this.listenPort}-${maxPort}`);
-  }
-
-  private async sendToClient(clientUrl: string, message: JSONRPCMessage): Promise<void> {
-    let retries = 3;
-    while (retries > 0) {
-      try {
-        const resp = await fetch(clientUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(message),
-        });
-        if (!resp.ok) {
-          throw new Error(`HTTP ${resp.status}: ${await resp.text()}`);
-        }
-        return;
-      } catch (err) {
-        retries--;
-        if (retries === 0) {
-          throw err;
-        }
-        this.outputChannel.appendLine(`Error sending message to ${clientUrl}: ${err}. Retries left: ${retries}`);
-        await new Promise<void>((resolve) => setTimeout(resolve, 1000));
-      }
+      // Server status is automatically set to running when httpServer is set
+      this.serverStatus = 'running';
+      this.outputChannel.appendLine('Server is now running');
+    } catch (err) {
+      this.serverStatus = 'stopped';
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      this.outputChannel.appendLine(`Failed to start server on port ${this.listenPort}: ${errorMessage}`);
+      throw new Error(`Failed to bind to port ${this.listenPort}: ${errorMessage}`);
     }
   }
 
-  async send(message: JSONRPCMessage) {
+  async send(message: JSONRPCMessage): Promise<void> {
     this.outputChannel.appendLine('Sending message: ' + JSON.stringify(message));
-    if (this.clientUrls.size === 0) {
-      throw new Error('No clients connected. Waiting for clients to connect with clientUrl parameter.');
-    }
 
-    const sendPromises = Array.from(this.clientUrls).map(clientUrl =>
-      this.sendToClient(clientUrl, message)
-        .catch(err => {
-          this.outputChannel.appendLine(`Failed to send message to ${clientUrl}: ${err}`);
-          return err;
-        })
-    );
-
-    const results = await Promise.allSettled(sendPromises);
-    const failures = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
-
-    if (failures.length > 0) {
-      this.outputChannel.appendLine(`Failed to send message to ${failures.length} client(s):`);
-      failures.forEach(f => this.outputChannel.appendLine(f.reason.message));
+    if ('id' in message && 'result' in message) {
+      // This is a response to a previous request
+      const resolve = this.pendingResponses.get(message.id);
+      if (resolve) {
+        resolve(message);
+        this.pendingResponses.delete(message.id);
+      } else {
+        this.outputChannel.appendLine(`No pending response for ID: ${message.id}`);
+      }
     }
   }
 
-  close(): Promise<void> {
-    return Promise.resolve();
+  async close(): Promise<void> {
+    this.serverStatus = 'stopped';
+    if (this.httpServer) {
+      this.outputChannel.appendLine('Closing server');
+      this.httpServer.close();
+      this.httpServer = undefined;
+    }
   }
 }

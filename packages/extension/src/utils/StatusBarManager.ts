@@ -7,16 +7,16 @@ export class StatusBarManager {
 
   constructor() {
     // ステータスバーにApplyボタンを作成（チェックマークアイコン）
-    this.applyButton = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 10000);
+    this.applyButton = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, Infinity);
     this.applyButton.text = "$(check)";
-    this.applyButton.command = 'statusBar.applyChanges';
+    this.applyButton.command = 'mcp.textEditor.applyChanges';
     this.applyButton.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
     this.applyButton.tooltip = "Apply the pending changes";
 
     // ステータスバーにDiscardボタンを作成（×アイコン）
-    this.discardButton = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 10000);
+    this.discardButton = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, Infinity);
     this.discardButton.text = "$(x)";
-    this.discardButton.command = 'statusBar.cancelChanges';
+    this.discardButton.command = 'mcp.textEditor.cancelChanges';
     this.discardButton.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
     this.discardButton.tooltip = "Discard the pending changes";
 
@@ -26,18 +26,22 @@ export class StatusBarManager {
 
   private registerCommands(): void {
     console.log('[StatusBarManager] Registering commands');
-    vscode.commands.registerCommand('statusBar.applyChanges', () => {
-      console.log('[StatusBarManager] Apply command triggered');
+
+    // Register MCP text editor commands
+    vscode.commands.registerCommand('mcp.textEditor.applyChanges', () => {
+      console.log('[StatusBarManager] MCP apply command triggered');
       this.hide();
       this.resolvePromise?.(true);
       this.resolvePromise = null;
+      return true;
     });
 
-    vscode.commands.registerCommand('statusBar.cancelChanges', () => {
-      console.log('[StatusBarManager] Cancel command triggered');
+    vscode.commands.registerCommand('mcp.textEditor.cancelChanges', () => {
+      console.log('[StatusBarManager] MCP cancel command triggered');
       this.hide();
       this.resolvePromise?.(false);
       this.resolvePromise = null;
+      return false;
     });
   }
 

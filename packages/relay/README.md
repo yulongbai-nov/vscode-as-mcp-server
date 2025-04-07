@@ -20,12 +20,12 @@ npm install -g
 ## Usage
 
 ```bash
-vscode-as-mcp-relay --server-url http://localhost:6010 --listen-port 6011
+vscode-as-mcp-relay --server-url http://localhost:60100 --listen-port 6011
 ```
 
 ### Command Line Options
 
-- `--server-url`: Base URL of the MCP server (default: http://localhost:6010)
+- `--server-url`: Base URL of the MCP server (default: http://localhost:60100)
 - `--listen-port`: Starting port to listen for incoming JSON-RPC messages (default: 6011)
 
 ## Custom Protocol

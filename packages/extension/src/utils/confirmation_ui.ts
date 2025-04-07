@@ -29,7 +29,7 @@ export class ConfirmationUI {
   static async confirm(message: string, detail: string, approveLabel: string, denyLabel: string): Promise<string> {
     // 設定から確認UI方法を取得
     const config = vscode.workspace.getConfiguration('mcpServer');
-    const confirmationUI = config.get<string>('confirmationUI', 'statusBar');
+    const confirmationUI = config.get<string>('confirmationUI', 'quickPick');
 
     console.log(`[ConfirmationUI] Using ${confirmationUI} UI for confirmation`);
 

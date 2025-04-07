@@ -3,34 +3,41 @@ import { BidiHttpTransport } from './bidi-http-transport';
 import { registerVSCodeCommands } from './commands';
 import { createMcpServer, extensionDisplayName } from './mcp-server';
 import { DIFF_VIEW_URI_SCHEME } from './utils/DiffViewProvider';
-import { resolvePort } from './utils/port';
 
 // MCP Server のステータスを表示するステータスバーアイテム
 let serverStatusBarItem: vscode.StatusBarItem;
 let transport: BidiHttpTransport;
-let running = false;  // サーバーが起動しているかどうかのフラグ
 
 // ステータスバーを更新する関数
-function updateServerStatusBar(isRunning: boolean, isActive: boolean) {
+function updateServerStatusBar(status: 'running' | 'stopped' | 'starting' | 'tool_list_updated') {
   if (!serverStatusBarItem) {
     return;
   }
 
-  if (isRunning) {
-    serverStatusBarItem.text = isActive
-      ? '$(star-full) MCP Active'
-      : '$(server) MCP Server';
-    serverStatusBarItem.tooltip = isActive
-      ? 'Running as Active MCP Server'
-      : 'Running as MCP Server (non-active)';
-    serverStatusBarItem.command = 'mcpServer.toggleActiveStatus';
-    serverStatusBarItem.show();
-  } else {
-    serverStatusBarItem.text = '$(circle-slash) MCP Server';
-    serverStatusBarItem.tooltip = 'MCP Server is not running';
-    serverStatusBarItem.command = 'mcpServer.startServer';
-    serverStatusBarItem.show();
+  switch (status) {
+    case 'running':
+      serverStatusBarItem.text = '$(server) MCP Server';
+      serverStatusBarItem.tooltip = 'MCP Server is running';
+      serverStatusBarItem.command = 'mcpServer.stopServer';
+      break;
+    case 'starting':
+      serverStatusBarItem.text = '$(sync~spin) MCP Server';
+      serverStatusBarItem.tooltip = 'Starting...';
+      serverStatusBarItem.command = undefined;
+      break;
+    case 'tool_list_updated':
+      serverStatusBarItem.text = '$(warning) MCP Server';
+      serverStatusBarItem.tooltip = 'Tool list updated - Restart MCP Client';
+      serverStatusBarItem.command = 'mcpServer.stopServer';
+      break;
+    case 'stopped':
+    default:
+      serverStatusBarItem.text = '$(circle-slash) MCP Server';
+      serverStatusBarItem.tooltip = 'MCP Server is not running';
+      serverStatusBarItem.command = 'mcpServer.toggleActiveStatus';
+      break;
   }
+  serverStatusBarItem.show();
 }
 
 export const activate = async (context: vscode.ExtensionContext) => {
@@ -43,62 +50,22 @@ export const activate = async (context: vscode.ExtensionContext) => {
   // Initialize the MCP server instance
   const mcpServer = createMcpServer(outputChannel);
 
-  // Server state
-  running = false;
-
   // Create status bar item
   serverStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   context.subscriptions.push(serverStatusBarItem);
-  updateServerStatusBar(false, false);
-
-  // Register command to toggle active status
-  context.subscriptions.push(
-    vscode.commands.registerCommand('mcpServer.toggleActiveStatus', async () => {
-      if (!transport) {
-        vscode.window.showWarningMessage('MCP Server is not running.');
-        return;
-      }
-
-      // アクティブが有効な場合は無効に
-      if (transport.isActiveServer) {
-        transport.isActiveServer = false;
-        updateServerStatusBar(running, false);
-        outputChannel.appendLine('Server is now non-Active');
-        vscode.window.showInformationMessage('MCP Server is now a non-Active server.');
-        return;
-      }
-
-      // 現在非アクティブの場合はリクエストを送信
-      try {
-        const success = await transport.requestActive();
-        if (success) {
-          updateServerStatusBar(running, true);
-          outputChannel.appendLine('Server is now Active');
-          vscode.window.showInformationMessage('MCP Server is now an Active server.');
-        } else {
-          vscode.window.showErrorMessage('Failed to set MCP Server as Active.');
-        }
-      } catch (err) {
-        outputChannel.appendLine(`Error toggling active status: ${err}`);
-        vscode.window.showErrorMessage(`Failed to set MCP Server as Active: ${err}`);
-      }
-    })
-  );
 
   // Server start function
   async function startServer(port: number) {
+    outputChannel.appendLine(`DEBUG: Starting MCP Server on port ${port}...`);
     transport = new BidiHttpTransport(port, outputChannel);
-    await transport.start();
-    await mcpServer.connect(transport);
-    running = true;
+    // サーバー状態変更のイベントハンドラを設定
+    transport.onServerStatusChanged = (status) => {
+      updateServerStatusBar(status);
+    };
 
-    // デフォルトでは非アクティブサーバーとして起動
-    transport.isActiveServer = false;
-    updateServerStatusBar(running, false);
+    await mcpServer.connect(transport); // connect calls transport.start().
+    updateServerStatusBar(transport.serverStatus);
   }
-
-  // Register VSCode commands
-  registerVSCodeCommands(context, mcpServer, outputChannel, startServer, updateServerStatusBar, running);
 
   // Register Diff View Provider for file comparison functionality
   const diffContentProvider = new (class implements vscode.TextDocumentContentProvider {
@@ -112,34 +79,18 @@ export const activate = async (context: vscode.ExtensionContext) => {
     vscode.workspace.registerTextDocumentContentProvider(DIFF_VIEW_URI_SCHEME, diffContentProvider),
   );
 
-  // ステータスバーのコマンドを登録
-  context.subscriptions.push(
-    vscode.commands.registerCommand('mcp.textEditor.applyChanges', () => {
-      vscode.commands.executeCommand('statusBar.applyChanges');
-      return true;
-    }),
-    vscode.commands.registerCommand('mcp.textEditor.cancelChanges', () => {
-      vscode.commands.executeCommand('statusBar.cancelChanges');
-      return false;
-    })
-  );
-
   // Start server if configured to do so
   const mcpConfig = vscode.workspace.getConfiguration('mcpServer');
-  const port = await resolvePort(mcpConfig.get<number>('port', 6010));
-  const startOnActivate = mcpConfig.get<boolean>('startOnActivate', true);
-
-  if (startOnActivate) {
-    try {
-      await startServer(port);
-      outputChannel.appendLine(`MCP Server started on port ${port}.`);
-    } catch (err) {
-      outputChannel.appendLine(`Failed to start MCP Server: ${err}`);
-      running = false;
-    }
-  } else {
-    outputChannel.appendLine('MCP Server startup disabled by configuration.');
+  const port = mcpConfig.get<number>('port', 60100);
+  try {
+    await startServer(port);
+    outputChannel.appendLine(`MCP Server started on port ${port}.`);
+  } catch (err) {
+    outputChannel.appendLine(`Failed to start MCP Server: ${err}`);
   }
+
+  // Register VSCode commands
+  registerVSCodeCommands(context, mcpServer, outputChannel, startServer, transport);
 
   outputChannel.appendLine(`${extensionDisplayName} activated.`);
 };

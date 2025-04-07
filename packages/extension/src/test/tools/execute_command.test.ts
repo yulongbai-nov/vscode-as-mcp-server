@@ -115,14 +115,14 @@ suite('Execute Command Tool Test Suite', function () {
     assert.match(response.text, /done/, 'Output should contain command result');
   });
 
-  suite('PotentiallyDestructive Flag Tests', function () {
+  suite('ModifySomething Flag Tests', function () {
     setup(function () {
       // Reset the test tool before each test
       tool.askCalled = false;
     });
 
     test('Commands should require confirmation by default', async function () {
-      // Execute with default potentiallyDestructive=true
+      // Execute with default modifySomething=true
       await tool.execute('echo "Default confirmation behavior"');
 
       // Confirm that ask was called
@@ -130,7 +130,7 @@ suite('Execute Command Tool Test Suite', function () {
     });
 
     test('Destructive commands should always require confirmation', async function () {
-      // Execute with explicit potentiallyDestructive=true
+      // Execute with explicit modifySomething=true
       await tool.execute('rm -f test.txt', undefined, true);
 
       // Confirm that ask was called
@@ -148,7 +148,7 @@ suite('Execute Command Tool Test Suite', function () {
       // Reset the tracking flag
       tool.askCalled = false;
 
-      // Execute with potentiallyDestructive=false
+      // Execute with modifySomething=false
       await tool.execute('ls -la', undefined, false);
 
       // Confirm that ask was NOT called
@@ -166,10 +166,10 @@ suite('Execute Command Tool Test Suite', function () {
       // Reset the tracking flag
       tool.askCalled = false;
 
-      // Execute with potentiallyDestructive=false
+      // Execute with modifySomething=false
       await tool.execute('grep "pattern" test.txt', undefined, false);
 
-      // Confirm that ask was called despite potentiallyDestructive being false
+      // Confirm that ask was called despite modifySomething being false
       assert.strictEqual(tool.askCalled, true, 'Confirmation should be requested when confirmNonDestructiveCommands=true');
 
       // Reset the setting

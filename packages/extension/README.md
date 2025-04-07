@@ -1,7 +1,5 @@
 # VSCode as MCP Server
 
-[Marketplace](https://marketplace.visualstudio.com/items?itemName=acomagu.vscode-as-mcp-server)
-
 A VSCode extension that turns your VSCode into an MCP server, enabling advanced coding assistance from MCP clients like Claude Desktop.
 
 ## Key Features
@@ -21,7 +19,7 @@ A VSCode extension that turns your VSCode into an MCP server, enabling advanced 
 ![Preview tool](https://storage.googleapis.com/zenn-user-upload/8968c9ad3920-20250407.gif)
 
 ### Multi-instance Switching
-- Easily switch the MCP server between multiple open VSCode windows.(Just by clicking the status bar item)
+- Easily switch the MCP server between multiple open VSCode windows.
 
 ![Instance switching](https://storage.googleapis.com/zenn-user-upload/0a2bc2bee634-20250407.gif)
 
@@ -63,7 +61,7 @@ A VSCode extension that turns your VSCode into an MCP server, enabling advanced 
 
 3. Check the MCP server status in the bottom-right VSCode status bar:
 
-    - (Server icon): Server is running
+    - ✅: Server is running
     - ∅: Click to start the server
 
 ![Server status indicator](https://storage.googleapis.com/zenn-user-upload/321704116d4a-20250408.png)

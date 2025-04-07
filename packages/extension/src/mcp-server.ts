@@ -18,10 +18,13 @@ import {
   stopDebugSessionSchema,
 } from './tools/debug_tools';
 import { executeCommandSchema, executeCommandToolHandler } from './tools/execute_command';
+import { executeVSCodeCommandSchema, executeVSCodeCommandToolHandler } from './tools/execute_vscode_command';
 import { focusEditorTool } from './tools/focus_editor';
 import { getTerminalOutputSchema, getTerminalOutputToolHandler } from './tools/get_terminal_output';
 import { listDirectorySchema, listDirectoryTool } from './tools/list_directory';
-import { registerCopilotTools } from './tools/register_copilot_tools';
+import { listVSCodeCommandsSchema, listVSCodeCommandsToolHandler } from './tools/list_vscode_commands';
+import { previewUrlSchema, previewUrlToolHandler } from './tools/preview_url';
+import { registerExternalTools } from './tools/register_external_tools';
 import { textEditorSchema, textEditorTool } from './tools/text_editor';
 
 export const extensionName = 'vscode-mcp-server';
@@ -200,7 +203,10 @@ function registerTools(mcpServer: ToolRegistry) {
       - Shell integration for reliable output capture
       - Output compression for large outputs
       - Detailed exit status reporting
-      - Flag for potentially destructive commands (potentiallyDestructive: false to skip confirmation for read-only commands)
+      - Flag for potentially destructive commands (modifySomething: false to skip confirmation for read-only commands)
+
+      When running commands that might prompt for user input, include appropriate flags like '-y' or '--yes'
+      to prevent interactive prompts from blocking execution.
     `.trim(),
     executeCommandSchema.shape,
     async (params) => {
@@ -402,8 +408,83 @@ function registerTools(mcpServer: ToolRegistry) {
     }
   );
 
-  // Register all Copilot tools
-  registerCopilotTools(mcpServer);
+  // Register list vscode commands tool
+  mcpServer.tool(
+    'list_vscode_commands',
+    dedent`
+      List available VSCode commands with optional filtering.
+      This tool returns a list of command IDs that can be executed with the execute_vscode_command tool.
+      Use it to discover available commands or find specific commands by keyword.
+    `.trim(),
+    listVSCodeCommandsSchema.shape,
+    async (params: z.infer<typeof listVSCodeCommandsSchema>) => {
+      const result = await listVSCodeCommandsToolHandler(params);
+      return {
+        content: result.content.map((item) => ({
+          ...item,
+          type: 'text' as const,
+        })),
+        isError: result.isError,
+      };
+    }
+  );
+
+  // Register execute vscode command tool
+  mcpServer.tool(
+    'execute_vscode_command',
+    dedent`
+      Execute any VSCode command by its command ID.
+      This tool allows direct access to VSCode's command API, enabling actions like opening views,
+      triggering built-in functionality, or invoking extension commands.
+      Use list_vscode_commands tool first to discover available commands.
+    `.trim(),
+    executeVSCodeCommandSchema.shape,
+    async (params: z.infer<typeof executeVSCodeCommandSchema>) => {
+      const result = await executeVSCodeCommandToolHandler(params);
+      return {
+        content: result.content.map((item) => ({
+          ...item,
+          type: 'text' as const,
+        })),
+        isError: result.isError,
+      };
+    }
+  );
+
+  // Register preview url tool
+  mcpServer.tool(
+    'preview_url',
+    dedent`
+      Open a URL in VSCode's built-in simple browser, beside the current editor.
+      This tool provides a convenient way to preview web content directly within VSCode,
+      without switching to an external browser.
+
+      This tool only accepts valid URLs starting with http:// or https:// protocols.
+      Local file paths are not supported.
+
+      This is particularly useful after starting development servers in background mode.
+
+      Example workflow:
+      1. Start a Vite dev server in background mode:
+         execute_command: { "command": "npm run dev", "background": true }
+      2. Preview the local development server:
+         preview_url: { "url": "http://localhost:5173", "title": "TODO App" }
+    `.trim(),
+    previewUrlSchema.shape,
+    async (params: z.infer<typeof previewUrlSchema>) => {
+      const result = await previewUrlToolHandler(params);
+      return {
+        content: result.content.map((item) => ({
+          ...item,
+          type: 'text' as const,
+        })),
+        isError: result.isError,
+      };
+    }
+  );
+
+  // Register all external tools
+  registerExternalTools(mcpServer);
 }
 
 function registerResourceHandlers(mcpServer: McpServer) {

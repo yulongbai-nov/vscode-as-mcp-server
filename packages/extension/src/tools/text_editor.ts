@@ -70,7 +70,7 @@ class EditorManager {
   }
 
   // 確認プロンプトを表示する
-  private async showPersistentConfirmation(message: string, approveLabel: string, denyLabel: string): Promise<boolean> {
+  private async showPersistentConfirmation(message: string, approveLabel: string, denyLabel: string): Promise<{ approved: boolean; feedback?: string }> {
     try {
       const editor = vscode.window.activeTextEditor;
       if (!editor) {
@@ -81,10 +81,15 @@ class EditorManager {
 
       // ConfirmationUI を使用して確認
       const result = await ConfirmationUI.confirm(message, "", approveLabel, denyLabel);
-      return result === "Approve";
+      if (result === "Approve") {
+        return { approved: true };
+      } else {
+        // "Deny"以外の場合はユーザーフィードバックとして扱う
+        return { approved: false, feedback: result !== "Deny" ? result : undefined };
+      }
     } catch (error) {
       console.error('Error showing confirmation:', error);
-      return false;
+      return { approved: false };
     }
   }
 
@@ -245,29 +250,43 @@ class EditorManager {
 
       // テスト実行時はダイアログをスキップ
       console.log('EditorManager: Checking approval');
-      const approved = skipDialog || await this.showPersistentConfirmation(
-        'Do you want to apply these changes?',
-        'Apply Changes',
-        'Discard Changes'
-      );
+      let confirmResult;
+      if (skipDialog) {
+        confirmResult = { approved: true };
+      } else {
+        confirmResult = await this.showPersistentConfirmation(
+          'Do you want to apply these changes?',
+          'Apply Changes',
+          'Discard Changes'
+        );
+      }
 
-      if (!approved) {
+      if (!confirmResult.approved) {
         console.log('EditorManager: Changes rejected');
         await this.diffViewProvider.revertChanges();
+
+        // ユーザーがフィードバックを提供した場合はそれを含める
+        const feedbackMessage = confirmResult.feedback
+          ? `Changes were rejected by the user with feedback: ${confirmResult.feedback}`
+          : 'Changes were rejected by the user';
+
         return {
-          content: [{ type: 'text', text: 'Changes were rejected by the user' }],
-          isError: true,
+          content: [{ type: 'text', text: feedbackMessage }],
+          isError: true
         };
       }
 
       console.log('EditorManager: Saving changes');
-      const { newProblemsMessage, userEdits } = await this.diffViewProvider.saveChanges();
+      const { newProblemsMessage, userEdits, userFeedback } = await this.diffViewProvider.saveChanges();
+
+      // フィードバックの有無に応じてコンテンツを整形
+      const feedbackText = userFeedback ? `\nUser feedback: ${userFeedback}` : '';
 
       if (userEdits) {
         return {
           content: [{
             type: 'text',
-            text: `User modified the changes. Please review the updated content.${newProblemsMessage || ''}`
+            text: `User modified the changes. Please review the updated content.${newProblemsMessage || ''}${feedbackText}`
           }],
         };
       }
@@ -275,7 +294,7 @@ class EditorManager {
       return {
         content: [{
           type: 'text',
-          text: `Text replacement completed successfully${newProblemsMessage || ''}`
+          text: `Text replacement completed successfully${newProblemsMessage || ''}${feedbackText}`
         }],
       };
     } catch (error) {
@@ -325,29 +344,43 @@ class EditorManager {
 
       // テスト実行時はダイアログをスキップ
       console.log('EditorManager: Checking approval');
-      const approved = skipDialog || await this.showPersistentConfirmation(
-        'Do you want to create this file?',
-        'Apply Changes',
-        'Discard Changes'
-      );
+      let confirmResult;
+      if (skipDialog) {
+        confirmResult = { approved: true };
+      } else {
+        confirmResult = await this.showPersistentConfirmation(
+          'Do you want to create this file?',
+          'Apply Changes',
+          'Discard Changes'
+        );
+      }
 
-      if (!approved) {
+      if (!confirmResult.approved) {
         console.log('EditorManager: File creation cancelled');
         await this.diffViewProvider.revertChanges();
+
+        // ユーザーがフィードバックを提供した場合はそれを含める
+        const feedbackMessage = confirmResult.feedback
+          ? `File creation was cancelled by the user with feedback: ${confirmResult.feedback}`
+          : 'File creation was cancelled by the user';
+
         return {
-          content: [{ type: 'text', text: 'File creation was cancelled by the user' }],
+          content: [{ type: 'text', text: feedbackMessage }],
           isError: true,
         };
       }
 
       console.log('EditorManager: Saving changes');
-      const { newProblemsMessage, userEdits } = await this.diffViewProvider.saveChanges();
+      const { newProblemsMessage, userEdits, userFeedback } = await this.diffViewProvider.saveChanges();
+
+      // フィードバックの有無に応じてコンテンツを整形
+      const feedbackText = userFeedback ? `\nUser feedback: ${userFeedback}` : '';
 
       if (userEdits) {
         return {
           content: [{
             type: 'text',
-            text: `User modified the new file content. Please review the changes.${newProblemsMessage || ''}`
+            text: `User modified the new file content. Please review the changes.${newProblemsMessage || ''}${feedbackText}`
           }],
         };
       }
@@ -355,7 +388,7 @@ class EditorManager {
       return {
         content: [{
           type: 'text',
-          text: `File created successfully${newProblemsMessage || ''}`
+          text: `File created successfully${newProblemsMessage || ''}${feedbackText}`
         }],
       };
     } catch (error) {
@@ -408,29 +441,43 @@ class EditorManager {
 
       // テスト実行時はダイアログをスキップ
       console.log('EditorManager: Checking approval');
-      const approved = skipDialog || await this.showPersistentConfirmation(
-        'Do you want to insert this text?',
-        'Apply Changes',
-        'Discard Changes'
-      );
+      let confirmResult;
+      if (skipDialog) {
+        confirmResult = { approved: true };
+      } else {
+        confirmResult = await this.showPersistentConfirmation(
+          'Do you want to insert this text?',
+          'Apply Changes',
+          'Discard Changes'
+        );
+      }
 
-      if (!approved) {
+      if (!confirmResult.approved) {
         console.log('EditorManager: Text insertion cancelled');
         await this.diffViewProvider.revertChanges();
+
+        // ユーザーがフィードバックを提供した場合はそれを含める
+        const feedbackMessage = confirmResult.feedback
+          ? `Text insertion was cancelled by the user with feedback: ${confirmResult.feedback}`
+          : 'Text insertion was cancelled by the user';
+
         return {
-          content: [{ type: 'text', text: 'Text insertion was cancelled by the user' }],
+          content: [{ type: 'text', text: feedbackMessage }],
           isError: true,
         };
       }
 
       console.log('EditorManager: Saving changes');
-      const { newProblemsMessage, userEdits } = await this.diffViewProvider.saveChanges();
+      const { newProblemsMessage, userEdits, userFeedback } = await this.diffViewProvider.saveChanges();
+
+      // フィードバックの有無に応じてコンテンツを整形
+      const feedbackText = userFeedback ? `\nUser feedback: ${userFeedback}` : '';
 
       if (userEdits) {
         return {
           content: [{
             type: 'text',
-            text: `User modified the inserted content. Please review the changes.${newProblemsMessage || ''}`
+            text: `User modified the inserted content. Please review the changes.${newProblemsMessage || ''}${feedbackText}`
           }],
         };
       }
@@ -438,7 +485,7 @@ class EditorManager {
       return {
         content: [{
           type: 'text',
-          text: `Text insertion completed successfully${newProblemsMessage || ''}`
+          text: `Text insertion completed successfully${newProblemsMessage || ''}${feedbackText}`
         }],
       };
     } catch (error) {

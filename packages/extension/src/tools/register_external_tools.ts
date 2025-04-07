@@ -1,33 +1,45 @@
+import { Tool } from '@modelcontextprotocol/sdk/types';
 import * as vscode from 'vscode';
 import { ToolRegistry } from '../mcp-server';
-import { Tool } from '@modelcontextprotocol/sdk/types';
 
 // ホワイトリストとして登録するツールの名前の配列
-const ALLOWED_TOOLS = [
-  'copilot_semanticSearch',
-  'copilot_searchWorkspaceSymbols',
-  'copilot_listCodeUsages',
-  'copilot_vscodeAPI',
-  'copilot_findFiles',
-  'copilot_findTextInFiles',
-  'copilot_readFile',
-  'copilot_listDirectory',
-  'copilot_getErrors',
-  // 'copilot_readProjectStructure', // No InputSchema
-  'copilot_getChangedFiles',
-  // 'copilot_testFailure', // No InputSchema
-  'copilot_runTests',
-  'copilot_runVsCodeTask'
-  // below are not allowed without invocationToken
-  // 'copilot_runInTerminal',
-  // 'copilot_getTerminalOutput',
-  // 'copilot_getTerminalSelection',
-  // 'copilot_getTerminalLastCommand',
-  // 'copilot_editFile'
+// const ALLOWED_TOOLS = [
+//   'copilot_semanticSearch',
+//   'copilot_searchWorkspaceSymbols',
+//   'copilot_listCodeUsages',
+//   'copilot_vscodeAPI',
+//   'copilot_findFiles',
+//   'copilot_findTextInFiles',
+//   'copilot_readFile',
+//   'copilot_listDirectory',
+//   'copilot_getErrors',
+//   // 'copilot_readProjectStructure', // No InputSchema
+//   'copilot_getChangedFiles',
+//   // 'copilot_testFailure', // No InputSchema
+//   'copilot_runTests',
+//   'copilot_runVsCodeTask'
+//   // below are not allowed without invocationToken
+//   // 'copilot_runInTerminal',
+//   // 'copilot_getTerminalOutput',
+//   // 'copilot_getTerminalSelection',
+//   // 'copilot_getTerminalLastCommand',
+//   // 'copilot_editFile'
+// ];
+
+const notAllowedTools = [
+  // No Input Schema
+  'copilot_readProjectStructure',
+  'copilot_testFailure',
+  // not allowed without invocationToken
+  'copilot_runInTerminal',
+  'copilot_getTerminalOutput',
+  'copilot_getTerminalSelection',
+  'copilot_getTerminalLastCommand',
+  'copilot_editFile',
 ];
 
-// Function to register all allowed Copilot tools to the MCP server
-export function registerCopilotTools(mcpServer: ToolRegistry) {
+// Function to register all allowed external tools to the MCP server
+export function registerExternalTools(mcpServer: ToolRegistry) {
   if (!vscode.lm || !vscode.lm.tools) {
     console.error('vscode.lm.tools is not available');
     return;
@@ -35,7 +47,7 @@ export function registerCopilotTools(mcpServer: ToolRegistry) {
 
   // ホワイトリストに含まれているツールだけを登録
   for (const tool of vscode.lm.tools) {
-    if (ALLOWED_TOOLS.includes(tool.name)) {
+    if (!notAllowedTools.includes(tool.name)) {
       if (!tool.inputSchema || !('type' in tool.inputSchema) || tool.inputSchema.type !== 'object') {
         console.error(`Tool ${tool.name} has no input schema or invalid type`);
         continue
@@ -53,6 +65,10 @@ function registerTool(mcpServer: ToolRegistry, tool: vscode.LanguageModelToolInf
     tool.inputSchema as (Tool['inputSchema'] | undefined) ?? { type: 'object' },
     async (params: any) => {
       try {
+        // console.log('TEST', await vscode.lm.invokeTool('copilot_getErrors', {
+        //   input: {},
+        //   toolInvocationToken: undefined,
+        // }));
         // VSCodeのネイティブツールを呼び出す
         const result = await vscode.lm.invokeTool(tool.name, {
           input: params,

@@ -57,8 +57,8 @@ suite('BidiHttpTransport Test Suite', function () {
       res.json({ status: 'ok', timestamp: new Date().toISOString() });
     });
 
-    // /request-active エンドポイント
-    app.post('/request-active', (_req: express.Request, res: express.Response) => {
+    // /request-handover エンドポイント
+    app.post('/request-handover', (_req: express.Request, res: express.Response) => {
       res.json({ success: true });
     });
 
@@ -97,32 +97,34 @@ suite('BidiHttpTransport Test Suite', function () {
   test('should start the server on the specified port', async function () {
     await transport.start();
 
-    assert.strictEqual(transport.actualPort, testPort);
     assert.ok(outputChannel.logs.some(log => log.includes(`MCP Server running at :${testPort}`)));
   });
 
-  test('should try next port if the initial port is in use', async function () {
+  test('should fail if the port is already in use', async function () {
     // 最初のポートで別のサーバーを起動
     const blockingServer = await setupTestServer(testPort);
 
     try {
-      await transport.start();
-
-      // 次のポートを試みるはず
-      assert.strictEqual(transport.actualPort, testPort + 1);
-      assert.ok(outputChannel.logs.some(log => log.includes(`Port ${testPort} is in use, trying ${testPort + 1}`)));
+      let errorThrown = false;
+      try {
+        await transport.start();
+      } catch (err) {
+        errorThrown = true;
+        assert.ok((err as Error).message.includes(`Failed to bind to port ${testPort}`));
+      }
+      assert.ok(errorThrown, 'Expected an error to be thrown when port is in use');
     } finally {
       blockingServer.close();
     }
   });
 
-  test('requestActive should set isActiveServer to true upon successful response', async function () {
+  test('requestHandover should set isServerRunning to true upon successful response', async function () {
     await transport.start();
 
-    // リクエスト前はfalse
-    assert.strictEqual(transport.isActiveServer, false);
+    // リクエスト前はtrue (start()で設定される)
+    assert.strictEqual(transport.isServerRunning, true);
 
-    // requestActiveメソッドのfetchをモック化
+    // requestHandoverメソッドのfetchをモック化
     const originalFetch = global.fetch;
 
     // @ts-ignore
@@ -135,17 +137,24 @@ suite('BidiHttpTransport Test Suite', function () {
       } as Response;
     };
 
+    // start()をモック化して、実際にサーバーを再起動しないようにする
+    const originalStart = transport.start;
+    transport.start = async () => {
+      // サーバーが起動したことをシミュレート
+      assert.ok(outputChannel.logs.some(log => log.includes('Server is now running')));
+    };
+
     try {
       // リクエスト実行
-      const result = await transport.requestActive();
+      const result = await transport.requestHandover();
 
       // 結果のチェック
       assert.strictEqual(result, true);
-      assert.strictEqual(transport.isActiveServer, true);
-      assert.ok(outputChannel.logs.some(log => log.includes('Server is now active')));
+      assert.strictEqual(transport.isServerRunning, true);
     } finally {
-      // fetchを元に戻す
+      // モックを元に戻す
       global.fetch = originalFetch;
+      transport.start = originalStart;
     }
   });
 

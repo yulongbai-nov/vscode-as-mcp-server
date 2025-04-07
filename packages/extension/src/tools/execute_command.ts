@@ -8,20 +8,24 @@ import { delay } from "../utils/time.js"
 export const executeCommandSchema = z.object({
   command: z.string().describe("The command to execute"),
   customCwd: z.string().optional().describe("Optional custom working directory for command execution"),
-  potentiallyDestructive: z.boolean().optional().default(true).describe(
+  modifySomething: z.boolean().optional().default(true).describe(
     "Flag indicating if the command is potentially destructive or modifying. Default is true. " +
-    "Set to false for read-only commands (like grep, find, ls) to skip user confirmation. " +
-    "Commands that could modify files or system state should keep this as true. " +
-    "Note: User can override this behavior with the mcpServer.confirmNonDestructiveCommands setting."
+      "Set to false for read-only commands (like grep, find, ls) to skip user confirmation. " +
+      "Commands that could modify files or system state should keep this as true. " +
+      "Note: User can override this behavior with the mcpServer.confirmNonDestructiveCommands setting."
   ),
   background: z.boolean().optional().default(false).describe(
     "Flag indicating if the command should run in the background without waiting for completion. " +
     "When true, the tool will return immediately after starting the command. " +
-    "Default is false, which means the tool will wait for command completion."
+    "Default is false, which means the tool will wait for command completion. " +
+    "Always specify background=true or a timeout for commands that may never terminate, such as servers, " +
+    "or commands that might invoke pagers. This greatly impacts user experience."
   ),
   timeout: z.number().optional().default(300000).describe(
     "Timeout in milliseconds after which the command execution will be considered complete for reporting purposes. " +
-    "Does not actually terminate the command. Default is 300000 (5 minutes)."
+    "Does not actually terminate the command. Default is 300000 (5 minutes). " +
+    "Always specify background=true or an appropriate timeout for commands that may never terminate, such as servers, " +
+    "or commands that might invoke pagers. This greatly impacts user experience."
   ),
 })
 
@@ -37,7 +41,7 @@ export class ExecuteCommandTool {
   async execute(
     command: string,
     customCwd?: string,
-    potentiallyDestructive: boolean = true,
+    modifySomething: boolean = true,
     background: boolean = false,
     timeout: number = 300000
   ): Promise<[userRejected: boolean, ToolResponse]> {
@@ -46,7 +50,7 @@ export class ExecuteCommandTool {
     const confirmNonDestructiveCommands = config.get<boolean>("confirmNonDestructiveCommands", false);
 
     // Determine if we need to ask for confirmation
-    const shouldConfirm = potentiallyDestructive || confirmNonDestructiveCommands;
+    const shouldConfirm = modifySomething || confirmNonDestructiveCommands;
 
     if (shouldConfirm) {
       // Ask for permission based on either:
@@ -152,7 +156,7 @@ export async function executeCommandToolHandler(params: z.infer<typeof executeCo
   const [success, response] = await tool.execute(
     params.command,
     params.customCwd,
-    params.potentiallyDestructive,
+    params.modifySomething,
     params.background,
     params.timeout
   );

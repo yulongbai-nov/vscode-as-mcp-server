@@ -1,88 +1,79 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as vscode from 'vscode';
-import { resolvePort } from './utils/port';
 
 export interface ServerState {
-    value: boolean;
+  value: boolean;
 }
 
+import { BidiHttpTransport } from './bidi-http-transport';
+
 export function registerVSCodeCommands(
-    context: vscode.ExtensionContext,
-    mcpServer: McpServer,
-    outputChannel: vscode.OutputChannel,
-    startServer: (port: number) => Promise<void>,
-    updateStatusBar: (isRunning: boolean, isActive: boolean) => void,
-    running: boolean
+  context: vscode.ExtensionContext,
+  mcpServer: McpServer,
+  outputChannel: vscode.OutputChannel,
+  startServer: (port: number) => Promise<void>,
+  transport?: BidiHttpTransport
 ) {
-    // テキストエディタのアクションコマンドを登録
-    context.subscriptions.push(
-        vscode.commands.registerCommand('textEditor.applyChanges', () => {
-            vscode.commands.executeCommand('workbench.action.focusActiveEditorGroup');
-            return true;
-        }),
-        vscode.commands.registerCommand('textEditor.cancelChanges', () => {
-            vscode.commands.executeCommand('workbench.action.focusActiveEditorGroup');
-            return false;
-        })
-    );
-    // COMMAND PALETTE COMMAND: Stop the MCP Server
-    context.subscriptions.push(
-        vscode.commands.registerCommand('mcpServer.stopServer', () => {
-            if (!running) {
-                vscode.window.showWarningMessage('MCP Server is not running.');
-                outputChannel.appendLine('Attempted to stop the MCP Server, but it is not running.');
-                return;
-            }
-            mcpServer.close();
-            running = false;
-            updateStatusBar(false, false);
-        }),
-    );
+  // テキストエディタのアクションコマンドを登録
+  context.subscriptions.push(
+    vscode.commands.registerCommand('textEditor.applyChanges', () => {
+      vscode.commands.executeCommand('workbench.action.focusActiveEditorGroup');
+      return true;
+    }),
+    vscode.commands.registerCommand('textEditor.cancelChanges', () => {
+      vscode.commands.executeCommand('workbench.action.focusActiveEditorGroup');
+      return false;
+    })
+  );
+  // COMMAND PALETTE COMMAND: Stop the MCP Server
+  context.subscriptions.push(
+    vscode.commands.registerCommand('mcpServer.stopServer', () => {
+      try {
+        mcpServer.close();
+        outputChannel.appendLine('MCP Server stopped.');
+      } catch (err) {
+        vscode.window.showWarningMessage('MCP Server is not running.');
+        outputChannel.appendLine('Attempted to stop the MCP Server, but it is not running.');
+        return;
+      }
+      mcpServer.close();
+    }),
+  );
 
-    // COMMAND PALETTE COMMAND: Start the MCP Server
-    context.subscriptions.push(
-        vscode.commands.registerCommand('mcpServer.startServer', async () => {
-            if (running) {
-                vscode.window.showWarningMessage('MCP Server is already running.');
-                outputChannel.appendLine('Attempted to start the MCP Server, but it is already running.');
-                return;
-            }
-            const newPort = await resolvePort(vscode.workspace.getConfiguration('mcpServer').get<number>('port', 6010));
-            await startServer(newPort);
-            outputChannel.appendLine(`MCP Server started on port ${newPort}.`);
-            vscode.window.showInformationMessage(`MCP Server started on port ${newPort}.`);
-        }),
-    );
+  // COMMAND PALETTE COMMAND: Start the MCP Server
+  context.subscriptions.push(
+    vscode.commands.registerCommand('mcpServer.startServer', async () => {
+      try {
+        const port = vscode.workspace.getConfiguration('mcpServer').get<number>('port', 60100);
+        await startServer(port);
+        outputChannel.appendLine(`MCP Server started on port ${port}.`);
+        vscode.window.showInformationMessage(`MCP Server started on port ${port}.`);
+      } catch (err) {
+        outputChannel.appendLine(`Failed to start MCP Server: ${err}`);
+        vscode.window.showErrorMessage(`Failed to start MCP Server: ${err}`);
+      }
+    }),
+  );
 
-    // COMMAND PALETTE COMMAND: Set the MCP server port and restart the server
-    context.subscriptions.push(
-        vscode.commands.registerCommand('mcpServer.setPort', async () => {
-            const currentPort = vscode.workspace.getConfiguration('mcpServer').get<number>('port', 6010);
-            const newPortInput = await vscode.window.showInputBox({
-                prompt: 'Enter new port number for the MCP Server:',
-                value: String(currentPort),
-                validateInput: (input) => {
-                    const num = Number(input);
-                    if (isNaN(num) || num < 1 || num > 65535) {
-                        return 'Please enter a valid port number (1-65535).';
-                    }
-                    return null;
-                },
-            });
+  // Request handover
+  context.subscriptions.push(
+    vscode.commands.registerCommand('mcpServer.toggleActiveStatus', async () => {
+      if (!transport) {
+        vscode.window.showWarningMessage('MCP Server is not running.');
+        return;
+      }
 
-            if (newPortInput && newPortInput.trim().length > 0) {
-                const newPort = Number(newPortInput);
-                // Update the configuration so that subsequent startups use the new port
-                await vscode.workspace
-                    .getConfiguration('mcpServer')
-                    .update('port', newPort, vscode.ConfigurationTarget.Global);
-
-                // Restart the server
-                mcpServer.close();
-                await startServer(newPort);
-                outputChannel.appendLine(`MCP Server restarted on port ${newPort}`);
-                vscode.window.showInformationMessage(`MCP Server restarted on port ${newPort}`);
-            }
-        }),
-    );
+      try {
+        const success = await transport.requestHandover();
+        if (success) {
+          outputChannel.appendLine('Handover request successful');
+        } else {
+          vscode.window.showErrorMessage('Failed to complete handover request.');
+        }
+      } catch (err) {
+        outputChannel.appendLine(`Error requesting handover: ${err}`);
+        vscode.window.showErrorMessage(`Failed to complete handover request: ${err}`);
+      }
+    })
+  );
 }
