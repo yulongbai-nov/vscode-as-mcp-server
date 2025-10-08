@@ -129,7 +129,7 @@ export class BidiHttpTransport implements Transport {
 
     app.post('/notify-tools-updated', express.json(), (_req: express.Request, res: express.Response) => {
       this.outputChannel.appendLine('Received tools updated notification');
-      vscode.window.showWarningMessage('The Tool List has been updated. Please restart the MCP Client (e.g., Claude Desktop) to notify it of the new Tool List. (For Claude Desktop, click the top hamburger menu -> File -> Exit.)');
+      vscode.window.showWarningMessage('The Tool List has been updated. Please restart the MCP Client (e.g., Claude Desktop) to notify it of the new Tool List. (For Claude Desktop, click the top [...]
       this.serverStatus = 'tool_list_updated';
 
       res.send({ success: true });
@@ -172,7 +172,7 @@ export class BidiHttpTransport implements Transport {
     const startServer = (port: number): Promise<number> => {
       console.trace('Starting server on port: ' + port);
       return new Promise((resolve, reject) => {
-        const server = app.listen(port)
+        const server = app.listen(port, '0.0.0.0')
           .once('listening', () => {
             this.httpServer = server; // Store server instance
             this.outputChannel.appendLine(`MCP Server running at :${port}`);
