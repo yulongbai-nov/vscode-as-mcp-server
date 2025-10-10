@@ -59,7 +59,7 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Publish GitHub release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.extension_version.outputs.version }}
@@ -67,3 +67,30 @@ jobs:
           files: packages/extension/*.vsix
           draft: false
           prerelease: false
+          generate_release_notes: true
+
+      - name: Bump extension patch version
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          CURRENT_VERSION=$(node -p "require('./packages/extension/package.json').version")
+          node <<'NODE'
+          const fs = require('fs');
+          const path = './packages/extension/package.json';
+          const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
+          const parts = pkg.version.split('.').map(Number);
+          if (parts.length !== 3 || parts.some((n) => Number.isNaN(n))) {
+            throw new Error(`Unexpected semver format: ${pkg.version}`);
+          }
+          parts[2] += 1;
+          pkg.version = parts.join('.');
+          fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n');
+          NODE
+          NEXT_VERSION=$(node -p "require('./packages/extension/package.json').version")
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add packages/extension/package.json
+          git commit -m "chore: bump extension version to ${NEXT_VERSION} [skip release]"
+          git push
