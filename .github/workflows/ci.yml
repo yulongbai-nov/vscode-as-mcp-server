@@ -10,7 +10,7 @@ jobs:
   build-test-package:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -51,3 +51,17 @@ jobs:
         with:
           name: vscode-as-mcp-server-vsix
           path: packages/extension/*.vsix
+
+      - name: Determine extension version
+        id: extension_version
+        run: echo "version=$(node -p \"require('./packages/extension/package.json').version\")" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.extension_version.outputs.version }}
+          name: VSCode as MCP Server v${{ steps.extension_version.outputs.version }}
+          files: packages/extension/*.vsix
+          draft: false
+          prerelease: false
