@@ -54,7 +54,9 @@ jobs:
 
       - name: Determine extension version
         id: extension_version
-        run: echo "version=$(node -p \"require('./packages/extension/package.json').version\")" >> "$GITHUB_OUTPUT"
+        run: |
+          VERSION=$(node -p "require('./packages/extension/package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Publish GitHub release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
