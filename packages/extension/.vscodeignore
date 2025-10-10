@@ -1,0 +1,11 @@
+# Exclude source and tooling from VSIX payload
+src/
+.vscode/
+.vscode-test/
+node_modules/
+**/*.test.ts
+**/*.test.js
+tsconfig.json
+webpack.config.js
+build.js
+pnpm-lock.yaml
