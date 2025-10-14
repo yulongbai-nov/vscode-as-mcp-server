@@ -79,6 +79,7 @@ export async function listDirectoryTool(params: ListDirectoryParams): Promise<Li
     console.log(`[listDirectoryTool] Tree built: ${tree.name}, children: ${tree.children.length}`);
     tree.children.forEach(c => console.log(`  - ${c.name} (isDir: ${c.isDirectory})`));
     const treeText = generateTreeText(tree);
+    console.log(`[listDirectoryTool] Generated tree text length: ${treeText.length}, preview: ${treeText.substring(0, 100)}`);
 
     return {
       content: [{ type: 'text', text: treeText }],
@@ -219,15 +220,17 @@ async function buildDirectoryTree(
       // Calculate relative path from the root directory being listed, not its parent
       const relativePath = path.relative(fullPath, entryPath);
 
+      const isDirectory = !!(type & vscode.FileType.Directory);
+      // For directories, also check with trailing slash for gitignore matching
+      const gitignorePath = isDirectory ? relativePath + '/' : relativePath;
+
       // .gitignore パターンに一致するかチェック
       // Check whether the path matches .gitignore patterns.
-      if (ignorer.ignores(relativePath)) {
+      if (ignorer.ignores(relativePath) || ignorer.ignores(gitignorePath)) {
         console.log(`[buildDirectoryTree] Ignoring due to .gitignore: ${relativePath}`);
         continue;
       }
       console.log(`[buildDirectoryTree] Adding entry: ${name}, relativePath: ${relativePath}`);
-
-      const isDirectory = !!(type & vscode.FileType.Directory);
 
       if (isDirectory) {
         // 再帰的にサブディレクトリをスキャン
