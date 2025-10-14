@@ -45,8 +45,10 @@ jobs:
             libxrandr2 \
             libxkbcommon0 \
             libgbm1 \
-            libpango-1.0-0 \
-            libasound2
+            libpango-1.0-0
+          if ! sudo apt-get install -y libasound2; then
+            sudo apt-get install -y libasound2t64
+          fi
 
       - name: Run extension tests
         run: xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' pnpm --dir packages/extension test
