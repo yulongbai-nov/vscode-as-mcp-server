@@ -3,7 +3,7 @@
   "displayName": "VSCode as MCP Server",
   "description": "Expose VSCode features such as file viewing and editing as MCP, enabling the LLM to access these functionalities.",
   "publisher": "acomagu",
-  "version": "0.0.28",
+  "version": "0.0.29",
   "repository": {
     "type": "git",
     "url": "https://github.com/yulongbai-nov/vscode-as-mcp-server"
@@ -90,7 +90,7 @@
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
     "compile-tests": "node build.js --test",
     "pretest": "pnpm compile-tests",
-  "test": "vscode-test",
+    "test": "vscode-test",
     "package": "pnpm check-types && node build.js --production"
   },
   "devDependencies": {
