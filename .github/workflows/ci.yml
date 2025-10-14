@@ -14,15 +14,13 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user 1001
     permissions:
       contents: write
       packages: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Install xauth for xvfb
-        run: apt-get update && apt-get install -y xauth
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
