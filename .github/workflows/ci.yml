@@ -9,46 +9,21 @@ on:
 jobs:
   build-test-package:
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/yulongbai-nov/mono-bench-dev:v1
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user 1001
     permissions:
       contents: write
+      packages: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.6.1
-          run_install: false
-        # pnpm must be available before enabling pnpm caching in setup-node
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'pnpm'
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Install VS Code test dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libnspr4 \
-            libnss3 \
-            libatk-bridge2.0-0 \
-            libatk1.0-0 \
-            libxcomposite1 \
-            libxdamage1 \
-            libxfixes3 \
-            libxrandr2 \
-            libxkbcommon0 \
-            libgbm1 \
-            libpango-1.0-0
-          if ! sudo apt-get install -y libasound2; then
-            sudo apt-get install -y libasound2t64
-          fi
 
       - name: Run extension tests
         run: xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' pnpm --dir packages/extension test
