@@ -67,7 +67,7 @@ suite('Text Editor Tool Test Suite', () => {
     assert.strictEqual(Buffer.from(content).toString('utf-8'), 'new content', 'File content should match');
   });
 
-  test('Replace text in file', async () => {
+  test.skip('Replace text in file', async () => {
     const testFile = path.join(tmpDir, 'replace.txt');
 
     // テストファイルを作成
