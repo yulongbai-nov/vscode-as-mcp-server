@@ -22,6 +22,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install xvfb
+        run: |
+          apt-get update
+          apt-get install -y xvfb
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
