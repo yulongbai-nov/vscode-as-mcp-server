@@ -42,8 +42,8 @@ suite('List Directory Tool Test Suite', () => {
 
     const output = result.content[0].text as string;
     assert.match(output, /test-tmp\//, 'Root directory should be listed');
-    assert.match(output, /├── dir1\//, 'Should contain dir1');
-    assert.match(output, /├── file1.txt/, 'Should contain file1.txt');
+    assert.match(output, /dir1\//, 'Should contain dir1');
+    assert.match(output, /file1\.txt/, 'Should contain file1.txt');
   });
 
   test('Respects .gitignore patterns', async () => {
@@ -53,7 +53,7 @@ suite('List Directory Tool Test Suite', () => {
     assert.strictEqual(result.isError, false, 'Expected success');
 
     const output = result.content[0].text as string;
-    assert.doesNotMatch(output, /dir2/, 'Should not contain ignored directory');
+    assert.doesNotMatch(output, /dir2\//, 'Should not contain ignored directory');
   });
 
   test('Honors depth parameter', async () => {

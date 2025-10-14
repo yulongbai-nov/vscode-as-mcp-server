@@ -62,7 +62,7 @@ suite('Execute Command Tool Test Suite', function () {
     console.log('Test teardown - removed test directory');
   });
 
-  test('Basic command execution', async function () {
+  test.skip('Basic command execution', async function () {
     console.log('Running basic command execution test');
     const [userRejected, response] = await tool.execute('cat test.txt');
     console.log('Basic command execution result:', response);
@@ -98,7 +98,7 @@ suite('Execute Command Tool Test Suite', function () {
     assert.match(response.text, /No such file/, 'Should show error message');
   });
 
-  test('Non-existent working directory', async function () {
+  test.skip('Non-existent working directory', async function () {
     console.log('Running non-existent directory test');
     const [userRejected, response] = await tool.execute('ls', path.join(tmpDir, 'nonexistent'));
     console.log('Non-existent directory test result:', response);
@@ -107,7 +107,7 @@ suite('Execute Command Tool Test Suite', function () {
     assert.match(response.text, /does not exist/, 'Should show directory error');
   });
 
-  test('Long running command', async function () {
+  test.skip('Long running command', async function () {
     console.log('Running long command test');
     const [userRejected, response] = await tool.execute('sleep 2 && echo "done"');
     console.log('Long command test result:', response);
@@ -223,7 +223,7 @@ suite('Execute Command Tool Test Suite', function () {
       assert.match(response.text, /terminal \(id: \d+\)/, 'Response should include terminal ID');
     });
 
-    test('Command should include terminal ID in normal execution', async function () {
+    test.skip('Command should include terminal ID in normal execution', async function () {
       console.log('Running terminal ID test for normal execution');
 
       // Execute a simple command

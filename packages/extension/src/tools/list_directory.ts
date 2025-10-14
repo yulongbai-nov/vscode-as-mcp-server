@@ -7,7 +7,7 @@ import { z } from 'zod';
 // Define the Zod schema.
 export const listDirectorySchema = z.object({
   path: z.string().describe('Directory path to list'),
-  depth: z.number().int().min(1).optional().describe('Maximum depth for traversal (default: unlimited)'),
+  depth: z.number().int().optional().describe('Maximum depth for traversal (default: unlimited, -1 for unlimited)'),
   include_hidden: z.boolean().optional().describe('Include hidden files/directories (default: false)'),
 });
 
@@ -60,18 +60,26 @@ export async function listDirectoryTool(params: ListDirectoryParams): Promise<Li
 
     // ディレクトリツリーを構築
     // Build the directory tree.
+    // Handle depth: undefined or -1 means unlimited, otherwise use the specified depth
+    const maxDepth = (params.depth === undefined || params.depth === -1)
+      ? Number.MAX_SAFE_INTEGER
+      : params.depth;
+
     const tree = await buildDirectoryTree(
       resolvedPath,
       path.basename(resolvedPath),
       1,
-      params.depth || Number.MAX_SAFE_INTEGER,
+      maxDepth,
       params.include_hidden || false,
       ig
     );
 
     // ツリーを表示用のテキストに変換
     // Convert the tree into display text.
+    console.log(`[listDirectoryTool] Tree built: ${tree.name}, children: ${tree.children.length}`);
+    tree.children.forEach(c => console.log(`  - ${c.name} (isDir: ${c.isDirectory})`));
     const treeText = generateTreeText(tree);
+    console.log(`[listDirectoryTool] Generated tree text length: ${treeText.length}, preview: ${treeText.substring(0, 100)}`);
 
     return {
       content: [{ type: 'text', text: treeText }],
@@ -186,6 +194,7 @@ async function buildDirectoryTree(
     // ディレクトリ内のエントリを取得
     // Retrieve entries within the directory.
     const entries = await vscode.workspace.fs.readDirectory(uri);
+    console.log(`[buildDirectoryTree] Read ${entries.length} entries from ${fullPath}`);
 
     // ファイル名でソート (ディレクトリ優先)
     // Sort by name, prioritizing directories.
@@ -203,19 +212,25 @@ async function buildDirectoryTree(
       // 隠しファイルをスキップ (オプションで設定可能)
       // Skip hidden files unless configured otherwise.
       if (!includeHidden && name.startsWith('.')) {
+        console.log(`[buildDirectoryTree] Skipping hidden file: ${name}`);
         continue;
       }
 
       const entryPath = path.join(fullPath, name);
-      const relativePath = path.relative(path.dirname(fullPath), entryPath);
+      // Calculate relative path from the root directory being listed, not its parent
+      const relativePath = path.relative(fullPath, entryPath);
+
+      const isDirectory = !!(type & vscode.FileType.Directory);
+      // For directories, also check with trailing slash for gitignore matching
+      const gitignorePath = isDirectory ? relativePath + '/' : relativePath;
 
       // .gitignore パターンに一致するかチェック
       // Check whether the path matches .gitignore patterns.
-      if (ignorer.ignores(relativePath)) {
+      if (ignorer.ignores(relativePath) || ignorer.ignores(gitignorePath)) {
+        console.log(`[buildDirectoryTree] Ignoring due to .gitignore: ${relativePath}`);
         continue;
       }
-
-      const isDirectory = !!(type & vscode.FileType.Directory);
+      console.log(`[buildDirectoryTree] Adding entry: ${name}, relativePath: ${relativePath}`);
 
       if (isDirectory) {
         // 再帰的にサブディレクトリをスキャン

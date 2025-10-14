@@ -32,7 +32,7 @@ async function main() {
 async function testBuild() {
   const ctx = await esbuild.context({
     entryPoints: ['src/**/*.ts'],
-    bundle: true,
+    bundle: false,
     format: 'cjs',
     minify: false,
     sourcemap: true,
@@ -40,7 +40,6 @@ async function testBuild() {
     platform: 'node',
     outdir: 'out',
     logLevel: 'warning',
-    external: ['vscode'],
     plugins: [
       /* add to the end of plugins array */
       esbuildProblemMatcherPlugin

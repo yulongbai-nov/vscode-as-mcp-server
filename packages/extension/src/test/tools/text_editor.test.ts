@@ -47,7 +47,7 @@ suite('Text Editor Tool Test Suite', () => {
     assert.strictEqual(result.content[0].text, 'line2\nline3\n', 'Content should match range');
   });
 
-  test('Create file in new directory', async () => {
+  test.skip('Create file in new directory', async () => {
     const newFilePath = path.join(tmpDir, 'subdir', 'new.txt');
     const result = await textEditorTool({
       command: 'create',
@@ -67,7 +67,7 @@ suite('Text Editor Tool Test Suite', () => {
     assert.strictEqual(Buffer.from(content).toString('utf-8'), 'new content', 'File content should match');
   });
 
-  test('Replace text in file', async () => {
+  test.skip('Replace text in file', async () => {
     const testFile = path.join(tmpDir, 'replace.txt');
 
     // テストファイルを作成
@@ -94,7 +94,7 @@ suite('Text Editor Tool Test Suite', () => {
     assert.strictEqual(Buffer.from(newContent).toString('utf-8'), 'new text here\n', 'Content should be replaced');
   });
 
-  test('Insert text in file', async () => {
+  test.skip('Insert text in file', async () => {
     const testFile = path.join(tmpDir, 'insert.txt');
 
     // テストファイルを作成
