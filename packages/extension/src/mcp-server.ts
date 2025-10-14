@@ -7,7 +7,7 @@ import * as vscode from 'vscode';
 import { DiagnosticSeverity } from 'vscode';
 import { AnyZodObject, z, ZodRawShape } from 'zod';
 import { zodToJsonSchema } from "zod-to-json-schema";
-import packageJson from '../package.json';
+import * as packageJson from '../package.json';
 import { codeCheckerTool } from './tools/code_checker';
 import {
   listDebugSessions,
@@ -189,10 +189,17 @@ export class ToolRegistry {
 }
 
 export function createMcpServer(_outputChannel: vscode.OutputChannel): McpServer {
-  const mcpServer = new McpServer({
+  console.log(`[mcp] package.json version resolved to: ${packageJson?.version}`);
+  console.log(`[mcp] packageJson object:`, JSON.stringify(packageJson, null, 2));
+
+  // Ensure we have the required manifest fields for MCP SDK validation
+  const manifest = {
     name: extensionName,
-    version: packageJson.version,
-  }, {
+    version: packageJson.version || '0.0.27',
+    engines: packageJson.engines || { vscode: '^1.98.0' },
+  };
+
+  const mcpServer = new McpServer(manifest, {
     capabilities: {
       resources: {},
       tools: {},

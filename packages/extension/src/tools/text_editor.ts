@@ -308,6 +308,7 @@ class EditorManager {
             type: 'text',
             text: `User modified the changes. Please review the updated content.${newProblemsMessage || ''}${feedbackText}`
           }],
+          isError: false,
         };
       }
 
@@ -316,6 +317,7 @@ class EditorManager {
           type: 'text',
           text: `Text replacement completed successfully${newProblemsMessage || ''}${feedbackText}`
         }],
+        isError: false,
       };
     } catch (error) {
       console.error('EditorManager: Error in replaceText:', error);
@@ -408,6 +410,7 @@ class EditorManager {
             type: 'text',
             text: `User modified the new file content. Please review the changes.${newProblemsMessage || ''}${feedbackText}`
           }],
+          isError: false,
         };
       }
 
@@ -416,6 +419,7 @@ class EditorManager {
           type: 'text',
           text: `File created successfully${newProblemsMessage || ''}${feedbackText}`
         }],
+        isError: false,
       };
     } catch (error) {
       console.error('EditorManager: Error in createFile:', error);
@@ -509,6 +513,7 @@ class EditorManager {
             type: 'text',
             text: `User modified the inserted content. Please review the changes.${newProblemsMessage || ''}${feedbackText}`
           }],
+          isError: false,
         };
       }
 
@@ -517,6 +522,7 @@ class EditorManager {
           type: 'text',
           text: `Text insertion completed successfully${newProblemsMessage || ''}${feedbackText}`
         }],
+        isError: false,
       };
     } catch (error) {
       console.error('EditorManager: Error in insertText:', error);
@@ -544,6 +550,7 @@ class EditorManager {
       await this.diffViewProvider.revertChanges();
       return {
         content: [{ type: 'text', text: 'Undo completed successfully' }],
+        isError: false,
       };
     } catch (error) {
       console.error('EditorManager: Error in undoEdit:', error);

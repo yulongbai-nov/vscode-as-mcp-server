@@ -1,18 +1,13 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as vscode from 'vscode';
-
-export interface ServerState {
-  value: boolean;
-}
 
 import { BidiHttpTransport } from './bidi-http-transport';
 
 export function registerVSCodeCommands(
   context: vscode.ExtensionContext,
-  mcpServer: McpServer,
   outputChannel: vscode.OutputChannel,
   startServer: (port: number) => Promise<void>,
-  transport?: BidiHttpTransport
+  stopServer: () => Promise<void>,
+  getTransport: () => BidiHttpTransport | undefined,
 ) {
   // テキストエディタのアクションコマンドを登録
   // Register action commands for the text editor.
@@ -28,16 +23,14 @@ export function registerVSCodeCommands(
   );
   // COMMAND PALETTE COMMAND: Stop the MCP Server
   context.subscriptions.push(
-    vscode.commands.registerCommand('mcpServer.stopServer', () => {
+    vscode.commands.registerCommand('mcpServer.stopServer', async () => {
       try {
-        mcpServer.close();
-        outputChannel.appendLine('MCP Server stopped.');
+        await stopServer();
+        vscode.window.showInformationMessage('MCP Server stopped.');
       } catch (err) {
         vscode.window.showWarningMessage('MCP Server is not running.');
         outputChannel.appendLine('Attempted to stop the MCP Server, but it is not running.');
-        return;
       }
-      mcpServer.close();
     }),
   );
 
@@ -59,6 +52,7 @@ export function registerVSCodeCommands(
   // Request handover
   context.subscriptions.push(
     vscode.commands.registerCommand('mcpServer.toggleActiveStatus', async () => {
+      const transport = getTransport();
       if (!transport) {
         vscode.window.showWarningMessage('MCP Server is not running.');
         return;
