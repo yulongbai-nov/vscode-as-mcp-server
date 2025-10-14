@@ -25,8 +25,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Check for xvfb
+        run: |
+          which xvfb-run || echo "xvfb-run not in PATH"
+          ls /usr/bin/xvfb* || echo "No xvfb in /usr/bin"
+
       - name: Run extension tests
-        run: pnpm --dir packages/extension test
+        run: /usr/bin/xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' pnpm --dir packages/extension test || pnpm --dir packages/extension test
 
       - name: Run relay tests
         run: pnpm --dir packages/relay test
