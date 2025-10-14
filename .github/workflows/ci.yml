@@ -26,7 +26,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run extension tests
-        run: xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' pnpm --dir packages/extension test
+        run: pnpm --dir packages/extension test
 
       - name: Run relay tests
         run: pnpm --dir packages/relay test
