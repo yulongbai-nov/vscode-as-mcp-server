@@ -40,7 +40,8 @@ export class BidiHttpTransport implements Transport {
     this.serverStatus = 'starting';
 
     try {
-      // 現在のサーバーに対してハンドオーバーリクエストを送信
+  // 現在のサーバーに対してハンドオーバーリクエストを送信
+  // Send a handover request to the current server.
       const response = await fetch(`http://localhost:${this.listenPort}/request-handover`, {
         method: 'POST',
         headers: {
@@ -53,7 +54,8 @@ export class BidiHttpTransport implements Transport {
       if (data.success) {
         this.outputChannel.appendLine('Handover request accepted');
 
-        // ハンドオーバーが成功したら、1秒待ってからサーバーを再起動する
+  // ハンドオーバーが成功したら、1秒待ってからサーバーを再起動する
+  // After a successful handover, wait one second before restarting the server.
         this.outputChannel.appendLine('Waiting 1 second before starting server...');
         await new Promise(resolve => setTimeout(resolve, 1000));
 
@@ -71,11 +73,13 @@ export class BidiHttpTransport implements Transport {
         return false;
       }
     } catch (err) {
-      // エラーが発生した場合（サーバーが起動していない場合など）
+  // エラーが発生した場合（サーバーが起動していない場合など）
+  // If an error occurs (for example, the server is not running).
       const errorMessage = err instanceof Error ? err.message : String(err);
       this.outputChannel.appendLine(`Handover request failed: ${errorMessage}`);
 
-      // ハンドオーバーリクエストが失敗した場合も、1秒待ってからサーバーを起動してみる
+  // ハンドオーバーリクエストが失敗した場合も、1秒待ってからサーバーを起動してみる
+  // Even when the handover request fails, wait one second and attempt to start the server.
       this.outputChannel.appendLine('Waiting 1 second before starting server...');
       await new Promise(resolve => setTimeout(resolve, 1000));
 

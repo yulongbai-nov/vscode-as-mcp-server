@@ -15,6 +15,7 @@ export function registerVSCodeCommands(
   transport?: BidiHttpTransport
 ) {
   // テキストエディタのアクションコマンドを登録
+  // Register action commands for the text editor.
   context.subscriptions.push(
     vscode.commands.registerCommand('textEditor.applyChanges', () => {
       vscode.commands.executeCommand('workbench.action.focusActiveEditorGroup');

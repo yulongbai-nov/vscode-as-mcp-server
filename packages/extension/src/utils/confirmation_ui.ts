@@ -18,13 +18,16 @@ export interface ConfirmationResult {
 
 /**
  * 設定に基づいて確認UIを表示するユーティリティクラス
+ * Utility class that displays confirmation UI based on settings.
  */
 export class ConfirmationUI {
   // StatusBarManagerのシングルトンインスタンス
+  // Singleton instance of StatusBarManager.
   private static statusBarManager: StatusBarManager | null = null;
 
   /**
    * StatusBarManagerのインスタンスを取得または初期化します
+   * Retrieve or initialize the StatusBarManager instance.
    */
   private static getStatusBarManager(): StatusBarManager {
     if (!this.statusBarManager) {
@@ -35,11 +38,12 @@ export class ConfirmationUI {
 
   /**
    * 設定に基づいてコマンド実行前の確認UIを表示します
-   * @param message 確認メッセージ
-   * @param detail 追加の詳細情報（コマンドなど）
-   * @param approveLabel 承認ボタンのラベル
-   * @param denyLabel 拒否ボタンのラベル
-  * @returns 承認/拒否と追加アクション情報を含む結果オブジェクト
+   * Display the confirmation UI before command execution based on settings.
+   * @param message 確認メッセージ (confirmation message)
+   * @param detail 追加の詳細情報（コマンドなど） (additional detail such as the command)
+   * @param approveLabel 承認ボタンのラベル (approve button label)
+   * @param denyLabel 拒否ボタンのラベル (deny button label)
+   * @returns 承認/拒否と追加アクション情報を含む結果オブジェクト (result object containing approval/denial and optional action data)
    */
   static async confirm(
     message: string,
@@ -48,7 +52,8 @@ export class ConfirmationUI {
     denyLabel: string,
     actions: ConfirmationAction[] = []
   ): Promise<ConfirmationResult> {
-    // 設定から確認UI方法を取得
+  // 設定から確認UI方法を取得
+  // Retrieve the confirmation UI preference from settings.
     const config = vscode.workspace.getConfiguration('mcpServer');
     const confirmationUI = config.get<string>('confirmationUI', 'quickPick');
 
@@ -63,6 +68,7 @@ export class ConfirmationUI {
 
   /**
    * QuickPickを使用した確認UIを表示します
+   * Display the confirmation UI using QuickPick.
    */
   private static async showQuickPickConfirmation(
     message: string,
@@ -71,7 +77,8 @@ export class ConfirmationUI {
     denyLabel: string,
     actions: ConfirmationAction[]
   ): Promise<ConfirmationResult> {
-    // QuickPickを作成
+  // QuickPickを作成
+  // Create the QuickPick instance.
     const quickPick = vscode.window.createQuickPick();
 
     quickPick.title = message;
@@ -152,7 +159,7 @@ export class ConfirmationUI {
       });
 
       quickPick.onDidHide(() => {
-        // Handle dismissal of the QuickPick
+  // Handle dismissal of the QuickPick
         if (!resolved && !awaitingInput) {
           resolved = true;
           resolve({ decision: 'deny' });
@@ -165,6 +172,7 @@ export class ConfirmationUI {
 
   /**
    * ステータスバーを使用した確認UIを表示します
+   * Display the confirmation UI using the status bar.
    */
   private static async showStatusBarConfirmation(
     message: string,
@@ -172,24 +180,29 @@ export class ConfirmationUI {
     approveLabel: string,
     denyLabel: string
   ): Promise<ConfirmationResult> {
-    // メッセージを表示
+  // メッセージを表示
+  // Display the message.
     vscode.window.showInformationMessage(`${message} ${detail ? `- ${detail}` : ''}`);
 
-    // StatusBarManagerのインスタンスを取得
+  // StatusBarManagerのインスタンスを取得
+  // Obtain the StatusBarManager instance.
     try {
       const statusBarManager = this.getStatusBarManager();
 
-      // StatusBarManagerを使用してユーザーの選択を待機
+  // StatusBarManagerを使用してユーザーの選択を待機
+  // Use the StatusBarManager to await the user's choice.
       console.log('[ConfirmationUI] Using StatusBarManager for confirmation');
       const approved = await statusBarManager.ask(approveLabel, denyLabel);
       statusBarManager.hide();
 
-      // 承認された場合は "Approve" を返す
+  // 承認された場合は "Approve" を返す
+  // Return "Approve" when the user approves.
       if (approved) {
         return { decision: 'approve' };
       }
 
-      // 拒否された場合は追加のフィードバックを収集
+  // 拒否された場合は追加のフィードバックを収集
+  // Collect optional feedback when the user denies.
       const inputBox = vscode.window.createInputBox();
       inputBox.title = "Feedback";
       inputBox.placeholder = "Add context for the agent (optional)";
@@ -211,6 +224,7 @@ export class ConfirmationUI {
     } catch (error) {
       console.error('Error using StatusBarManager:', error);
       // エラーが発生した場合はQuickPickにフォールバック
+      // Fall back to the QuickPick confirmation when an error occurs.
       console.log('[ConfirmationUI] Falling back to QuickPick confirmation');
       return await this.showQuickPickConfirmation(message, detail, approveLabel, denyLabel, []);
     }

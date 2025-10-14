@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { ToolRegistry } from '../mcp-server';
 
 // ホワイトリストとして登録するツールの名前の配列
+// Array of tool names to register as the whitelist.
 // const ALLOWED_TOOLS = [
 //   'copilot_semanticSearch',
 //   'copilot_searchWorkspaceSymbols',
@@ -46,6 +47,7 @@ export function registerExternalTools(mcpServer: ToolRegistry) {
   }
 
   // ホワイトリストに含まれているツールだけを登録
+  // Register only tools included in the whitelist.
   for (const tool of vscode.lm.tools) {
     if (!notAllowedTools.includes(tool.name)) {
       if (!tool.inputSchema || !('type' in tool.inputSchema) || tool.inputSchema.type !== 'object') {
@@ -58,6 +60,7 @@ export function registerExternalTools(mcpServer: ToolRegistry) {
 }
 
 // 各ツールを登録する関数
+// Function to register each tool.
 function registerTool(mcpServer: ToolRegistry, tool: vscode.LanguageModelToolInformation) {
   mcpServer.toolWithRawInputSchema(
     tool.name,
@@ -69,13 +72,15 @@ function registerTool(mcpServer: ToolRegistry, tool: vscode.LanguageModelToolInf
         //   input: {},
         //   toolInvocationToken: undefined,
         // }));
-        // VSCodeのネイティブツールを呼び出す
+  // VSCodeのネイティブツールを呼び出す
+  // Invoke the native VS Code tool.
         const result = await vscode.lm.invokeTool(tool.name, {
           input: params,
           toolInvocationToken: undefined
         });
 
-        // 結果を適切な形式に変換
+  // 結果を適切な形式に変換
+  // Format the result into the expected structure.
         return {
           content: [{
             type: 'text' as const,

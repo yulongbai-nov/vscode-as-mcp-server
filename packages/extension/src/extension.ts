@@ -5,10 +5,12 @@ import { createMcpServer, extensionDisplayName } from './mcp-server';
 import { DIFF_VIEW_URI_SCHEME } from './utils/DiffViewProvider';
 
 // MCP Server のステータスを表示するステータスバーアイテム
+// Status bar item that displays the MCP Server status.
 let serverStatusBarItem: vscode.StatusBarItem;
 let transport: BidiHttpTransport;
 
 // ステータスバーを更新する関数
+// Function to update the status bar.
 function updateServerStatusBar(status: 'running' | 'stopped' | 'starting' | 'tool_list_updated') {
   if (!serverStatusBarItem) {
     return;
@@ -59,6 +61,7 @@ export const activate = async (context: vscode.ExtensionContext) => {
     outputChannel.appendLine(`DEBUG: Starting MCP Server on port ${port}...`);
     transport = new BidiHttpTransport(port, outputChannel);
     // サーバー状態変更のイベントハンドラを設定
+    // Register the event handler for server status changes.
     transport.onServerStatusChanged = (status) => {
       updateServerStatusBar(status);
     };
@@ -75,6 +78,7 @@ export const activate = async (context: vscode.ExtensionContext) => {
   })();
 
   // DiffViewProvider の URI スキームを mcp-diff に変更
+  // Change the DiffViewProvider URI scheme to mcp-diff.
   context.subscriptions.push(
     vscode.workspace.registerTextDocumentContentProvider(DIFF_VIEW_URI_SCHEME, diffContentProvider),
   );
