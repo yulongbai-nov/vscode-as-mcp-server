@@ -57,6 +57,24 @@
           "type": "boolean",
           "default": false,
           "description": "If true, even commands marked as non-destructive (modifySomething=false) will require user confirmation."
+        },
+        "mcpServer.commandApprovalPolicy": {
+          "type": "string",
+          "enum": [
+            "destructiveOnly",
+            "always",
+            "never"
+          ],
+          "default": "destructiveOnly",
+          "description": "Controls when the extension should request user approval before running terminal commands."
+        },
+        "mcpServer.commandWhitelist": {
+          "type": "array",
+          "default": [],
+          "description": "List of command prefixes or glob patterns that should run without asking for approval.",
+          "items": {
+            "type": "string"
+          }
         }
       }
     }

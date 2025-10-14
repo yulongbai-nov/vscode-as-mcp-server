@@ -12,6 +12,7 @@ A VSCode extension that turns your VSCode into an MCP server, enabling advanced 
 
 ### Terminal Operations
 - Execute commands within VSCode’s integrated terminal (supports background/foreground execution, and timeout settings).
+- Fine-tune approval requirements via `mcpServer.commandApprovalPolicy` and maintain an auto-approve whitelist for trusted commands.
 
 ### Preview Tools
 - Preview URLs directly within VSCode’s built-in browser (e.g., automatically opens browser preview after starting a Vite server).

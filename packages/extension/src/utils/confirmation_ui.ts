@@ -1,6 +1,21 @@
 import * as vscode from 'vscode';
 import { StatusBarManager } from './StatusBarManager';
 
+export interface ConfirmationAction {
+  id: string;
+  label: string;
+  description?: string;
+  detail?: string;
+  data?: unknown;
+}
+
+export interface ConfirmationResult {
+  decision: 'approve' | 'deny';
+  feedback?: string;
+  actionId?: string;
+  actionData?: unknown;
+}
+
 /**
  * 設定に基づいて確認UIを表示するユーティリティクラス
  */
@@ -24,17 +39,23 @@ export class ConfirmationUI {
    * @param detail 追加の詳細情報（コマンドなど）
    * @param approveLabel 承認ボタンのラベル
    * @param denyLabel 拒否ボタンのラベル
-   * @returns 承認された場合は "Approve"、拒否された場合は "Deny" または理由テキスト
+  * @returns 承認/拒否と追加アクション情報を含む結果オブジェクト
    */
-  static async confirm(message: string, detail: string, approveLabel: string, denyLabel: string): Promise<string> {
+  static async confirm(
+    message: string,
+    detail: string,
+    approveLabel: string,
+    denyLabel: string,
+    actions: ConfirmationAction[] = []
+  ): Promise<ConfirmationResult> {
     // 設定から確認UI方法を取得
     const config = vscode.workspace.getConfiguration('mcpServer');
     const confirmationUI = config.get<string>('confirmationUI', 'quickPick');
 
     console.log(`[ConfirmationUI] Using ${confirmationUI} UI for confirmation`);
 
-    if (confirmationUI === 'quickPick') {
-      return await this.showQuickPickConfirmation(message, detail, approveLabel, denyLabel);
+    if (confirmationUI === 'quickPick' || actions.length > 0) {
+      return await this.showQuickPickConfirmation(message, detail, approveLabel, denyLabel, actions);
     } else {
       return await this.showStatusBarConfirmation(message, detail, approveLabel, denyLabel);
     }
@@ -44,46 +65,85 @@ export class ConfirmationUI {
    * QuickPickを使用した確認UIを表示します
    */
   private static async showQuickPickConfirmation(
-    message: string, 
-    detail: string, 
+    message: string,
+    detail: string,
     approveLabel: string,
-    denyLabel: string
-  ): Promise<string> {
+    denyLabel: string,
+    actions: ConfirmationAction[]
+  ): Promise<ConfirmationResult> {
     // QuickPickを作成
     const quickPick = vscode.window.createQuickPick();
 
     quickPick.title = message;
     quickPick.placeholder = detail || '';
 
-    quickPick.items = [
-      { label: `$(check) Approve`, description: approveLabel },
-      { label: `$(x) Deny`, description: denyLabel }
+    type ConfirmationQuickPickItem = vscode.QuickPickItem & {
+      decision: 'approve' | 'deny';
+      actionId?: string;
+      actionData?: unknown;
+    };
+
+    const items: ConfirmationQuickPickItem[] = [
+      { label: `$(check) ${approveLabel}`, decision: 'approve' }
     ];
+
+    for (const action of actions) {
+      items.push({
+        label: action.label,
+        description: action.description,
+        detail: action.detail,
+        decision: 'approve',
+        actionId: action.id,
+        actionData: action.data,
+      });
+    }
+
+    items.push({ label: `$(x) ${denyLabel}`, decision: 'deny' });
+
+    quickPick.items = items;
     quickPick.canSelectMany = false;
     quickPick.ignoreFocusOut = true;
 
-    return new Promise<string>(async (resolve) => {
+    return new Promise<ConfirmationResult>((resolve) => {
+      let resolved = false;
+      let awaitingInput = false;
       quickPick.onDidAccept(async () => {
-        const selection = quickPick.selectedItems[0];
+        const selection = quickPick.selectedItems[0] as ConfirmationQuickPickItem | undefined;
         quickPick.hide();
 
-        if (selection.label.includes("Approve")) {
-          resolve("Approve");
+        if (!selection) {
+          resolved = true;
+          resolve({ decision: 'deny' });
+          return;
+        }
+
+        if (selection.decision === 'approve') {
+          resolved = true;
+          resolve({
+            decision: 'approve',
+            actionId: selection.actionId,
+            actionData: selection.actionData,
+          });
         } else {
-          // Show QuickInput for feedback if denied
           const inputBox = vscode.window.createInputBox();
           inputBox.title = "Feedback";
           inputBox.placeholder = "Add context for the agent (optional)";
+          awaitingInput = true;
 
           inputBox.onDidAccept(() => {
             const feedback = inputBox.value.trim();
             inputBox.hide();
-            resolve(feedback || "Deny");
+            resolved = true;
+            awaitingInput = false;
+            resolve({ decision: 'deny', feedback: feedback || undefined });
           });
 
           inputBox.onDidHide(() => {
-            if (inputBox.value.trim() === "") {
-              resolve("Deny");
+            if (!resolved) {
+              const feedback = inputBox.value.trim();
+              resolved = true;
+              awaitingInput = false;
+              resolve({ decision: 'deny', feedback: feedback || undefined });
             }
           });
 
@@ -93,8 +153,9 @@ export class ConfirmationUI {
 
       quickPick.onDidHide(() => {
         // Handle dismissal of the QuickPick
-        if (!quickPick.selectedItems || quickPick.selectedItems.length === 0) {
-          resolve("Deny");
+        if (!resolved && !awaitingInput) {
+          resolved = true;
+          resolve({ decision: 'deny' });
         }
       });
 
@@ -106,11 +167,11 @@ export class ConfirmationUI {
    * ステータスバーを使用した確認UIを表示します
    */
   private static async showStatusBarConfirmation(
-    message: string, 
-    detail: string, 
+    message: string,
+    detail: string,
     approveLabel: string,
     denyLabel: string
-  ): Promise<string> {
+  ): Promise<ConfirmationResult> {
     // メッセージを表示
     vscode.window.showInformationMessage(`${message} ${detail ? `- ${detail}` : ''}`);
 
@@ -125,7 +186,7 @@ export class ConfirmationUI {
 
       // 承認された場合は "Approve" を返す
       if (approved) {
-        return "Approve";
+        return { decision: 'approve' };
       }
 
       // 拒否された場合は追加のフィードバックを収集
@@ -133,17 +194,16 @@ export class ConfirmationUI {
       inputBox.title = "Feedback";
       inputBox.placeholder = "Add context for the agent (optional)";
 
-      return new Promise<string>((resolve) => {
+      return new Promise<ConfirmationResult>((resolve) => {
         inputBox.onDidAccept(() => {
           const feedback = inputBox.value.trim();
           inputBox.hide();
-          resolve(feedback || "Deny");
+          resolve({ decision: 'deny', feedback: feedback || undefined });
         });
 
         inputBox.onDidHide(() => {
-          if (inputBox.value.trim() === "") {
-            resolve("Deny");
-          }
+          const feedback = inputBox.value.trim();
+          resolve({ decision: 'deny', feedback: feedback || undefined });
         });
 
         inputBox.show();
@@ -152,7 +212,7 @@ export class ConfirmationUI {
       console.error('Error using StatusBarManager:', error);
       // エラーが発生した場合はQuickPickにフォールバック
       console.log('[ConfirmationUI] Falling back to QuickPick confirmation');
-      return await this.showQuickPickConfirmation(message, detail, approveLabel, denyLabel);
+      return await this.showQuickPickConfirmation(message, detail, approveLabel, denyLabel, []);
     }
   }
 }

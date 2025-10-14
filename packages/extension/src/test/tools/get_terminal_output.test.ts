@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import { TerminalRegistry } from '../../integrations/terminal/TerminalRegistry';
 import { ExecuteCommandTool } from '../../tools/execute_command';
 import { GetTerminalOutputTool } from '../../tools/get_terminal_output';
+import { ConfirmationResult } from '../../utils/confirmation_ui';
 
 // Testing version of ExecuteCommandTool
 class TestableExecuteCommandTool extends ExecuteCommandTool {
@@ -12,8 +13,8 @@ class TestableExecuteCommandTool extends ExecuteCommandTool {
   }
 
   // Override ask to avoid UI prompts during tests
-  protected async ask(_command: string): Promise<string> {
-    return 'Approve'; // Always approve during tests
+  protected async ask(_command: string): Promise<ConfirmationResult> {
+    return { decision: 'approve' }; // Always approve during tests
   }
 }
 

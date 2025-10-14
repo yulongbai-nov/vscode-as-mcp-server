@@ -1,7 +1,7 @@
 import * as vscode from "vscode"
 import { z } from "zod"
 import { TerminalManager } from "../integrations/terminal/TerminalManager"
-import { ConfirmationUI } from "../utils/confirmation_ui"
+import { ConfirmationUI, ConfirmationResult } from "../utils/confirmation_ui"
 import { formatResponse, ToolResponse } from "../utils/response"
 import { delay } from "../utils/time.js"
 
@@ -45,12 +45,33 @@ export class ExecuteCommandTool {
     background: boolean = false,
     timeout: number = 300000
   ): Promise<[userRejected: boolean, ToolResponse]> {
-    // Get setting for confirming non-destructive commands
     const config = vscode.workspace.getConfiguration("mcpServer");
     const confirmNonDestructiveCommands = config.get<boolean>("confirmNonDestructiveCommands", false);
+    const approvalPolicy = config.get<"destructiveOnly" | "always" | "never">(
+      "commandApprovalPolicy",
+      "destructiveOnly"
+    );
+    const whitelist = config.get<string[]>("commandWhitelist", []);
 
-    // Determine if we need to ask for confirmation
-    const shouldConfirm = modifySomething || confirmNonDestructiveCommands;
+    const isWhitelisted = this.isCommandWhitelisted(command, whitelist);
+
+    let shouldConfirm: boolean;
+
+    switch (approvalPolicy) {
+      case "never":
+        shouldConfirm = false;
+        break;
+      case "always":
+        shouldConfirm = true;
+        break;
+      default:
+        shouldConfirm = modifySomething || confirmNonDestructiveCommands;
+        break;
+    }
+
+    if (isWhitelisted) {
+      shouldConfirm = false;
+    }
 
     if (shouldConfirm) {
       // Ask for permission based on either:
@@ -58,11 +79,18 @@ export class ExecuteCommandTool {
       // 2. User has enabled confirmation for all commands
       const userResponse = await this.ask(command);
 
+      if (userResponse.decision === "approve" && userResponse.actionId === "approve_whitelist") {
+        const pattern = (userResponse.actionData as string) ?? this.deriveWhitelistPattern(command);
+        await this.addCommandToWhitelist(pattern);
+      }
+
       // If user denied execution
-      if (userResponse !== "Approve") {
+      if (userResponse.decision !== "approve") {
         return [
           false,
-          formatResponse.toolResult(`Command execution was denied by the user. ${userResponse !== "Deny" ? `Feedback: ${userResponse}` : ""}`)
+          formatResponse.toolResult(
+            `Command execution was denied by the user.${userResponse.feedback ? ` Feedback: ${userResponse.feedback}` : ""}`
+          )
         ];
       }
     } else {
@@ -138,8 +166,68 @@ export class ExecuteCommandTool {
     }
   }
 
-  protected async ask(command: string): Promise<string> {
-    return await ConfirmationUI.confirm("Execute Command?", command, "Execute Command", "Deny");
+  protected async ask(command: string): Promise<ConfirmationResult> {
+    const pattern = this.deriveWhitelistPattern(command);
+    const actions = pattern
+      ? [{
+          id: "approve_whitelist",
+          label: `$(check-all) Approve and always allow \"${pattern}\"`,
+          description: "Skips confirmation when future commands start with this value.",
+          detail: pattern,
+          data: pattern,
+        }]
+      : [];
+
+    return await ConfirmationUI.confirm("Execute Command?", command, "Approve", "Deny", actions);
+  }
+
+  private deriveWhitelistPattern(command: string): string {
+    const normalized = command.trim();
+    if (normalized.length === 0) {
+      return normalized;
+    }
+    const [firstToken] = normalized.split(/\s+/);
+    return firstToken ?? normalized;
+  }
+
+  private isCommandWhitelisted(command: string, patterns: string[]): boolean {
+    const normalized = command.trim();
+    if (!normalized) {
+      return false;
+    }
+
+    return patterns.some((pattern) => this.matchesPattern(normalized, pattern));
+  }
+
+  private matchesPattern(command: string, pattern: string): boolean {
+    const trimmedPattern = pattern.trim();
+    if (!trimmedPattern) {
+      return false;
+    }
+
+    const escaped = trimmedPattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\\\*/g, ".*");
+    const regex = new RegExp(`^${escaped}`);
+    return regex.test(command);
+  }
+
+  private async addCommandToWhitelist(pattern: string): Promise<void> {
+    if (!pattern) {
+      return;
+    }
+
+    const config = vscode.workspace.getConfiguration("mcpServer");
+    const current = config.get<string[]>("commandWhitelist", []);
+    if (current.includes(pattern)) {
+      return;
+    }
+
+    const updated = [...current, pattern];
+    try {
+      await config.update("commandWhitelist", updated, vscode.ConfigurationTarget.Workspace);
+      vscode.window.showInformationMessage(`Added \"${pattern}\" to the MCP command whitelist.`);
+    } catch (error) {
+      console.error("Failed to update command whitelist", error);
+    }
   }
 }
 

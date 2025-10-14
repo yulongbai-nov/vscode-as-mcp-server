@@ -2,6 +2,7 @@ import * as assert from 'assert';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { ExecuteCommandTool } from '../../tools/execute_command';
+import { ConfirmationResult } from '../../utils/confirmation_ui';
 
 // Extend ExecuteCommandTool to override the ask method for testing
 class TestableExecuteCommandTool extends ExecuteCommandTool {
@@ -12,9 +13,9 @@ class TestableExecuteCommandTool extends ExecuteCommandTool {
   }
 
   // Override ask to avoid UI prompts during tests and track if it was called
-  protected async ask(_command: string): Promise<string> {
+  protected async ask(_command: string): Promise<ConfirmationResult> {
     this.askCalled = true;
-    return 'Approve'; // Always approve during tests
+    return { decision: 'approve' }; // Always approve during tests
   }
 }
 

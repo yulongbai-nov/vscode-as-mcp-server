@@ -72,6 +72,12 @@ class EditorManager {
   // 確認プロンプトを表示する
   private async showPersistentConfirmation(message: string, approveLabel: string, denyLabel: string): Promise<{ approved: boolean; feedback?: string }> {
     try {
+      const config = vscode.workspace.getConfiguration('mcpServer');
+      const approvalPolicy = config.get<'destructiveOnly' | 'always' | 'never'>('commandApprovalPolicy', 'destructiveOnly');
+      if (approvalPolicy === 'never') {
+        return { approved: true };
+      }
+
       const editor = vscode.window.activeTextEditor;
       if (!editor) {
         throw new Error('No active text editor');
@@ -81,12 +87,11 @@ class EditorManager {
 
       // ConfirmationUI を使用して確認
       const result = await ConfirmationUI.confirm(message, "", approveLabel, denyLabel);
-      if (result === "Approve") {
+      if (result.decision === "approve") {
         return { approved: true };
-      } else {
-        // "Deny"以外の場合はユーザーフィードバックとして扱う
-        return { approved: false, feedback: result !== "Deny" ? result : undefined };
       }
+
+      return { approved: false, feedback: result.feedback };
     } catch (error) {
       console.error('Error showing confirmation:', error);
       return { approved: false };
