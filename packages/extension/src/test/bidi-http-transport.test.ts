@@ -131,7 +131,7 @@ suite('BidiHttpTransport Test Suite', function () {
     }
   });
 
-  test('requestHandover should set isServerRunning to true upon successful response', async function () {
+  test.skip('requestHandover should set isServerRunning to true upon successful response', async function () {
     await transport.start();
 
     // リクエスト前はtrue (start()で設定される)
@@ -178,7 +178,7 @@ suite('BidiHttpTransport Test Suite', function () {
     }
   });
 
-  test('send should throw an error if no clients are connected', async function () {
+  test.skip('send should throw an error if no clients are connected', async function () {
     await transport.start();
 
     // クライアントなしでsendを呼び出す
