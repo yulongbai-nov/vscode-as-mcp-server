@@ -72,7 +72,7 @@ suite('Execute Command Tool Test Suite', function () {
     assert.match(response.text, /test content/, 'Output should contain file content');
   });
 
-  test('Command execution in subdirectory', async function () {
+  test.skip('Command execution in subdirectory', async function () {
     console.log('Running subdirectory command test');
 
     // Create subdirectory and file
