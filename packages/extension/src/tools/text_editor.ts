@@ -235,8 +235,8 @@ class EditorManager {
   // 置換を実行
   // Perform the replacement.
       console.log('EditorManager: Reading file content');
-      const doc = await vscode.workspace.openTextDocument(uri);
-      const content = doc.getText();
+      const existingBuffer = await vscode.workspace.fs.readFile(uri);
+      const content = Buffer.from(existingBuffer).toString('utf-8');
       if (!content.includes(oldStr)) {
         return {
           content: [{ type: 'text', text: `Text to replace '${oldStr}' not found in the file` }],
@@ -247,6 +247,14 @@ class EditorManager {
       console.log('EditorManager: Text replacement - Old:', oldStr, 'New:', newStr);
 
       console.log('EditorManager: Content length - Original:', content.length, 'New:', newContent.length);
+
+      if (skipDialog) {
+        await vscode.workspace.fs.writeFile(uri, Buffer.from(newContent, 'utf-8'));
+        return {
+          content: [{ type: 'text', text: 'Text replacement completed successfully' }],
+          isError: false,
+        };
+      }
 
   // 重要: 先に editType を設定してから open を呼び出す
   // Important: set editType before calling open.
@@ -336,16 +344,30 @@ class EditorManager {
     console.log('EditorManager: Creating file:', filePath);
     try {
       const uri = this.getFileUri(filePath);
+      let fileExists = false;
 
       try {
         await vscode.workspace.fs.stat(uri);
+        fileExists = true;
+      } catch {
+  // ファイルが存在しない場合は続行
+  // Continue if the file does not exist.
+      }
+
+      if (fileExists) {
         return {
           content: [{ type: 'text', text: 'File already exists' }],
           isError: true,
         };
-      } catch {
-  // ファイルが存在しない場合は続行
-  // Continue if the file does not exist.
+      }
+
+      if (skipDialog) {
+        await this.ensureParentDirectory(filePath);
+        await vscode.workspace.fs.writeFile(uri, Buffer.from(fileText, 'utf-8'));
+        return {
+          content: [{ type: 'text', text: 'File created successfully' }],
+          isError: false,
+        };
       }
 
   // 親ディレクトリを作成

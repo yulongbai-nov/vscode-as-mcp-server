@@ -7,9 +7,9 @@
 - Findings:
   - `ExecuteCommandTool` normalizes/validates working dirs before launching terminals (`packages/extension/src/tools/execute_command.ts:39`).
   - Absolute fixture paths keep terminal/file operations deterministic in tests (`packages/extension/src/test/tools/execute_command.test.ts:65`).
-  - Text editor tool create/replace/insert scenarios pass with `skip_dialog` flag (`packages/extension/src/test/tools/text_editor.test.ts:50`).
+  - Text editor tool `skip_dialog` path now applies edits directly without opening diff UIs, keeping create/replace/insert tests stable (`packages/extension/src/tools/text_editor.ts:234`).
   - BiDi transport awaits Express shutdown and restarts cleanly during handover (`packages/extension/src/bidi-http-transport.ts:15`).
-- Evidence: `pnpm --filter "./packages/extension" test` → 35 passing, 0 failing (11:45 UTC).
+- Evidence: `pnpm --filter "./packages/extension" test` → 35 passing, 0 failing (12:29 UTC).
 - Next Opportunities:
   1. Review whether `restartDelayMs` should be configurable for production deployments.
   2. Assess terminal shell integration warnings (`no_shell_integration`) for non-integrated shells.

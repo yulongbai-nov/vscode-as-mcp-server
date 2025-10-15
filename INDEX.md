@@ -14,7 +14,7 @@
 
 ## Tool Implementations
 - [`packages/extension/src/tools/execute_command.ts:34`](packages/extension/src/tools/execute_command.ts#L34) encapsulates terminal orchestration, confirmation flow, and output handling; `execute` validates CWDs and streams terminal output.
-- [`packages/extension/src/tools/text_editor.ts:570`](packages/extension/src/tools/text_editor.ts#L570) routes text editor operations (`view`, `str_replace`, `create`, `insert`, `undo_edit`) through the diff-driven `EditorManager`.
+- [`packages/extension/src/tools/text_editor.ts:35`](packages/extension/src/tools/text_editor.ts#L35) routes text editor operations (`view`, `str_replace`, `create`, `insert`, `undo_edit`), including headless `skip_dialog` edits used by tests.
 - [`packages/extension/src/tools/get_terminal_output.ts:12`](packages/extension/src/tools/get_terminal_output.ts#L12) surfaces buffered terminal output with optional tail trimming.
 - Additional utilities live under [`packages/extension/src/tools/`](packages/extension/src/tools/) and use Zod schemas mirrored in [`packages/extension/src/mcp-server.ts:20`](packages/extension/src/mcp-server.ts#L20).
 
