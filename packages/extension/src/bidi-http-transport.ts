@@ -12,6 +12,8 @@ export class BidiHttpTransport implements Transport {
   #serverStatus: 'running' | 'stopped' | 'starting' | 'tool_list_updated' = 'stopped';
   private pendingResponses = new Map<string | number, (resp: JSONRPCMessage) => void>();
   private httpServer?: http.Server; // Express server instance
+  private closingServerPromise: Promise<void> | null = null;
+  private restartDelayMs = 1000;
 
   public get isServerRunning(): boolean {
     return this.serverStatus === 'running';
@@ -54,10 +56,12 @@ export class BidiHttpTransport implements Transport {
       if (data.success) {
         this.outputChannel.appendLine('Handover request accepted');
 
-  // ハンドオーバーが成功したら、1秒待ってからサーバーを再起動する
-  // After a successful handover, wait one second before restarting the server.
-        this.outputChannel.appendLine('Waiting 1 second before starting server...');
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await this.waitForServerShutdown();
+
+  // ハンドオーバーが成功したら、設定された時間待機してからサーバーを再起動する
+  // After a successful handover, wait for the configured delay before restarting.
+        this.outputChannel.appendLine(`Waiting ${this.restartDelayMs}ms before starting server...`);
+        await this.delay(this.restartDelayMs);
 
         try {
           await this.start();
@@ -78,10 +82,12 @@ export class BidiHttpTransport implements Transport {
       const errorMessage = err instanceof Error ? err.message : String(err);
       this.outputChannel.appendLine(`Handover request failed: ${errorMessage}`);
 
-  // ハンドオーバーリクエストが失敗した場合も、1秒待ってからサーバーを起動してみる
-  // Even when the handover request fails, wait one second and attempt to start the server.
-      this.outputChannel.appendLine('Waiting 1 second before starting server...');
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await this.waitForServerShutdown();
+
+  // ハンドオーバーリクエストが失敗した場合も、設定された時間待機後にサーバー再起動を試みる
+  // Even when the handover request fails, wait for the configured delay and attempt to start the server.
+      this.outputChannel.appendLine(`Waiting ${this.restartDelayMs}ms before starting server...`);
+      await this.delay(this.restartDelayMs);
 
       try {
         await this.start();
@@ -118,17 +124,7 @@ export class BidiHttpTransport implements Transport {
       // Accept the handover request
       res.send({ success: true });
 
-      // Actually stop the server
-      if (this.httpServer) {
-        this.outputChannel.appendLine('Stopping server due to handover request');
-        this.httpServer.close();
-        this.httpServer = undefined;
-      }
-
-      // Set server to not running after sending response
-      this.serverStatus = 'stopped';
-
-      this.outputChannel.appendLine('Server is now not running due to handover request');
+      void this.closeServer('handover request');
     });
 
     app.post('/notify-tools-updated', express.json(), (_req: express.Request, res: express.Response) => {
@@ -219,11 +215,53 @@ export class BidiHttpTransport implements Transport {
   }
 
   async close(): Promise<void> {
-    this.serverStatus = 'stopped';
     if (this.httpServer) {
-      this.outputChannel.appendLine('Closing server');
-      this.httpServer.close();
-      this.httpServer = undefined;
+      await this.closeServer('manual close');
+    } else {
+      this.serverStatus = 'stopped';
     }
+  }
+
+  private async closeServer(reason: string): Promise<void> {
+    if (!this.httpServer) {
+      this.outputChannel.appendLine(`closeServer called (${reason}) but no active server instance.`);
+      return;
+    }
+
+    if (this.closingServerPromise) {
+      this.outputChannel.appendLine(`Server already closing due to ${reason}; awaiting existing shutdown.`);
+      await this.closingServerPromise;
+      return;
+    }
+
+    const serverToClose = this.httpServer;
+    this.outputChannel.appendLine(`Stopping server (${reason})`);
+
+    this.closingServerPromise = new Promise<void>((resolve) => {
+      serverToClose.close((err) => {
+        if (err) {
+          this.outputChannel.appendLine(`Error while closing server (${reason}): ${err.message}`);
+        } else {
+          this.outputChannel.appendLine('Server close complete.');
+        }
+        resolve();
+      });
+    }).finally(() => {
+      this.closingServerPromise = null;
+    });
+
+    this.httpServer = undefined;
+    await this.closingServerPromise;
+    this.serverStatus = 'stopped';
+  }
+
+  private async waitForServerShutdown(): Promise<void> {
+    if (this.closingServerPromise) {
+      await this.closingServerPromise;
+    }
+  }
+
+  private async delay(ms: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

@@ -62,9 +62,10 @@ suite('Execute Command Tool Test Suite', function () {
     console.log('Test teardown - removed test directory');
   });
 
-  test.skip('Basic command execution', async function () {
+  test('Basic command execution', async function () {
     console.log('Running basic command execution test');
-    const [userRejected, response] = await tool.execute('cat test.txt');
+    const targetFile = path.join(tmpDir, 'test.txt');
+    const [userRejected, response] = await tool.execute(`cat ${JSON.stringify(targetFile)}`);
     console.log('Basic command execution result:', response);
 
     assert.strictEqual(userRejected, false, 'Command should not be user rejected');
@@ -98,7 +99,7 @@ suite('Execute Command Tool Test Suite', function () {
     assert.match(response.text, /No such file/, 'Should show error message');
   });
 
-  test.skip('Non-existent working directory', async function () {
+  test('Non-existent working directory', async function () {
     console.log('Running non-existent directory test');
     const [userRejected, response] = await tool.execute('ls', path.join(tmpDir, 'nonexistent'));
     console.log('Non-existent directory test result:', response);
@@ -107,13 +108,18 @@ suite('Execute Command Tool Test Suite', function () {
     assert.match(response.text, /does not exist/, 'Should show directory error');
   });
 
-  test.skip('Long running command', async function () {
+  test('Long running command', async function () {
     console.log('Running long command test');
-    const [userRejected, response] = await tool.execute('sleep 2 && echo "done"');
+
+    const longCommandFile = path.join(tmpDir, 'long-command.txt');
+    const fileUri = vscode.Uri.file(longCommandFile);
+    await vscode.workspace.fs.writeFile(fileUri, Buffer.from('long task completed\n', 'utf-8'));
+
+    const [userRejected, response] = await tool.execute(`sleep 1 && cat ${JSON.stringify(longCommandFile)}`);
     console.log('Long command test result:', response);
 
     assert.strictEqual(userRejected, false, 'Command should not be user rejected');
-    assert.match(response.text, /done/, 'Output should contain command result');
+    assert.match(response.text, /long task completed/, 'Output should contain command result');
   });
 
   suite('ModifySomething Flag Tests', function () {
@@ -223,15 +229,18 @@ suite('Execute Command Tool Test Suite', function () {
       assert.match(response.text, /terminal \(id: \d+\)/, 'Response should include terminal ID');
     });
 
-    test.skip('Command should include terminal ID in normal execution', async function () {
+    test('Command should include terminal ID in normal execution', async function () {
       console.log('Running terminal ID test for normal execution');
 
-      // Execute a simple command
-      const [userRejected, response] = await tool.execute('echo "show terminal ID"', undefined, false);
+      const checkFile = path.join(tmpDir, 'terminal-check.txt');
+      const checkUri = vscode.Uri.file(checkFile);
+      await vscode.workspace.fs.writeFile(checkUri, Buffer.from('terminal check output\n', 'utf-8'));
+
+      const [userRejected, response] = await tool.execute(`cat ${JSON.stringify(checkFile)}`, undefined, false);
 
       assert.strictEqual(userRejected, false, 'Command should not be user rejected');
       assert.match(response.text, /terminal \(id: \d+\)/, 'Response should include terminal ID');
-      assert.match(response.text, /show terminal ID/, 'Output should contain command result');
+      assert.match(response.text, /terminal check output/, 'Output should contain command result');
     });
   });
 });

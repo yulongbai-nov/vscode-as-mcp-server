@@ -1,9 +1,11 @@
+import * as path from "path"
 import * as vscode from "vscode"
 import { z } from "zod"
 import { TerminalManager } from "../integrations/terminal/TerminalManager"
 import { ConfirmationUI, ConfirmationResult } from "../utils/confirmation_ui"
 import { formatResponse, ToolResponse } from "../utils/response"
 import { delay } from "../utils/time.js"
+import { normalizePath } from "../utils/path"
 
 export const executeCommandSchema = z.object({
   command: z.string().describe("The command to execute"),
@@ -34,7 +36,7 @@ export class ExecuteCommandTool {
   private terminalManager: TerminalManager
 
   constructor(cwd: string) {
-    this.cwd = cwd
+    this.cwd = normalizePath(path.resolve(cwd))
     this.terminalManager = new TerminalManager()
   }
 
@@ -98,7 +100,16 @@ export class ExecuteCommandTool {
       console.log(`Executing read-only command without confirmation: ${command}`);
     }
 
-    const terminalInfo = await this.terminalManager.getOrCreateTerminal(customCwd || this.cwd)
+    const workingDirectory = this.resolveWorkingDirectory(customCwd)
+    const workingDirectoryError = await this.validateWorkingDirectory(workingDirectory)
+    if (workingDirectoryError) {
+      return [
+        false,
+        formatResponse.toolResult(workingDirectoryError)
+      ]
+    }
+
+    const terminalInfo = await this.terminalManager.getOrCreateTerminal(workingDirectory)
     terminalInfo.terminal.show() // weird visual bug when creating new terminals (even manually) where there's an empty space at the top.
     const process = this.terminalManager.runCommand(terminalInfo, command)
 
@@ -150,9 +161,12 @@ export class ExecuteCommandTool {
     const terminalId = terminalInfo.id;
 
     if (completed) {
-      return [false, formatResponse.toolResult(
-        `Command executed in terminal (id: ${terminalId}).${result ? `\nOutput:\n${result}` : ""}`
-      )]
+      return [
+        false,
+        formatResponse.toolResult(
+          `Command executed in terminal (id: ${terminalId}).${result ? `\nOutput:\n${result}` : ""}`
+        )
+      ]
     } else {
       // If we got here and it's not completed, it's either still running or hit the timeout
       const timeoutMessage = timeout !== 300000 ? ` (timeout: ${timeout}ms)` : "";
@@ -229,6 +243,31 @@ export class ExecuteCommandTool {
       console.error("Failed to update command whitelist", error);
     }
   }
+
+  private resolveWorkingDirectory(customCwd?: string): string {
+    if (!customCwd) {
+      return this.cwd
+    }
+
+    if (path.isAbsolute(customCwd)) {
+      return normalizePath(customCwd)
+    }
+
+    return normalizePath(path.resolve(this.cwd, customCwd))
+  }
+
+  private async validateWorkingDirectory(directory: string): Promise<string | undefined> {
+    try {
+      const stat = await vscode.workspace.fs.stat(vscode.Uri.file(directory))
+      if (stat.type !== vscode.FileType.Directory) {
+        return `Working directory "${directory}" is not a directory.`
+      }
+      return undefined
+    } catch {
+      return `Working directory "${directory}" does not exist.`
+    }
+  }
+
 }
 
 export async function executeCommandToolHandler(params: z.infer<typeof executeCommandSchema>) {

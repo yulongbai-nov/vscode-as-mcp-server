@@ -131,72 +131,73 @@ suite('BidiHttpTransport Test Suite', function () {
     }
   });
 
-  test.skip('requestHandover should set isServerRunning to true upon successful response', async function () {
+  test('requestHandover should set isServerRunning to true upon successful response', async function () {
     await transport.start();
 
     // リクエスト前はtrue (start()で設定される)
     // `start()` sets `isServerRunning` to true before the request.
     assert.strictEqual(transport.isServerRunning, true);
 
-    // requestHandoverメソッドのfetchをモック化
-    // Mock the fetch call used by requestHandover.
-    const originalFetch = global.fetch;
+    // テスト実行を高速化するため、ハンドオーバー遅延を短縮
+    // Reduce restart delay to speed up the test run.
+    (transport as unknown as { restartDelayMs: number }).restartDelayMs = 50;
 
-    // @ts-ignore
-    global.fetch = async () => {
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({ success: true }),
-        text: async () => JSON.stringify({ success: true })
-      } as Response;
-    };
+    // リクエスト実行
+    // Execute the handover request against the running server.
+    const result = await transport.requestHandover();
 
-    // start()をモック化して、実際にサーバーを再起動しないようにする
-    // Stub out `start()` so the test does not restart the server.
-    const originalStart = transport.start;
-    transport.start = async () => {
-      // サーバーが起動したことをシミュレート
-      // Simulate a successful server start in the stub.
-      assert.ok(outputChannel.logs.some(log => log.includes('Server is now running')));
-    };
-
-    try {
-      // リクエスト実行
-      // Execute the handover request.
-      const result = await transport.requestHandover();
-
-      // 結果のチェック
-      // Verify the handover result and internal state.
-      assert.strictEqual(result, true);
-      assert.strictEqual(transport.isServerRunning, true);
-    } finally {
-      // モックを元に戻す
-      // Restore the original implementations.
-      global.fetch = originalFetch;
-      transport.start = originalStart;
-    }
+    // 結果のチェック
+    // Verify the handover result and internal state.
+    assert.strictEqual(result, true);
+    assert.strictEqual(transport.isServerRunning, true);
   });
 
-  test.skip('send should throw an error if no clients are connected', async function () {
+  test('send should resolve pending responses for HTTP clients', async function () {
     await transport.start();
 
-    // クライアントなしでsendを呼び出す
-    // Call `send` without any connected clients.
-    const message: JSONRPCMessage = {
+    const requestMessage: JSONRPCMessage = {
       jsonrpc: '2.0',
-      method: 'test',
-      id: 1
+      id: 1,
+      method: 'test.method'
     };
 
-    let threwError = false;
-    try {
-      await transport.send(message);
-    } catch (err) {
-      threwError = true;
-      assert.ok((err as Error).message.includes('No clients connected'));
-    }
+    const expectedResponse: JSONRPCMessage = {
+      jsonrpc: '2.0',
+      id: 1,
+      result: { ok: true }
+    };
 
-    assert.ok(threwError, 'Expected an error to be thrown');
+    const responsePromise = fetch(`http://localhost:${testPort}/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestMessage)
+    });
+
+    transport.onmessage = async (message) => {
+      assert.deepStrictEqual(message, requestMessage);
+      await transport.send(expectedResponse);
+    };
+
+    const response = await responsePromise;
+    assert.strictEqual(response.status, 200);
+
+    const body = await response.json();
+    assert.deepStrictEqual(body, expectedResponse);
+
+    // 再起動遅延をリセット
+    (transport as unknown as { restartDelayMs: number }).restartDelayMs = 1000;
+  });
+
+  test('send should log when no pending response is available', async function () {
+    await transport.start();
+
+    const message = {
+      jsonrpc: '2.0',
+      id: 1,
+      result: { ok: false }
+    } as JSONRPCMessage;
+
+    await transport.send(message);
+    assert.ok(outputChannel.logs.some(log => log.includes('No pending response for ID: 1')));
   });
 });
