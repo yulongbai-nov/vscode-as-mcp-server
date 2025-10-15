@@ -470,6 +470,25 @@ class EditorManager {
         };
       }
 
+      console.log('EditorManager: Reading file content');
+      const doc = await vscode.workspace.openTextDocument(uri);
+      const content = doc.getText();
+      const lines = content.split('\n');
+      const lineIndex = Math.max(0, insertLine); // 0-based index
+      lines.splice(lineIndex, 0, newStr);
+      const newContent = lines.join('\n');
+
+      if (skipDialog) {
+        await vscode.workspace.fs.writeFile(uri, Buffer.from(newContent, 'utf-8'));
+        return {
+          content: [{
+            type: 'text',
+            text: 'Text insertion completed successfully'
+          }],
+          isError: false,
+        };
+      }
+
   // 重要: 先に editType を設定してから open を呼び出す
   // Important: set editType before calling open.
       this.diffViewProvider.editType = 'modify';
@@ -478,14 +497,6 @@ class EditorManager {
       if (!this.diffViewProvider.isEditing) {
         await this.diffViewProvider.open(uri.fsPath);
       }
-
-      console.log('EditorManager: Reading file content');
-      const doc = await vscode.workspace.openTextDocument(uri);
-      const content = doc.getText();
-      const lines = content.split('\n');
-      const lineIndex = Math.max(0, insertLine); // 0-based index
-      lines.splice(lineIndex, 0, newStr);
-      const newContent = lines.join('\n');
 
       console.log('EditorManager: Updating content in DiffViewProvider');
       console.log('EditorManager: Content length - Original:', content.length, 'New:', newContent.length);

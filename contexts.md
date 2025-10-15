@@ -9,7 +9,10 @@
   - Absolute fixture paths keep terminal/file operations deterministic in tests (`packages/extension/src/test/tools/execute_command.test.ts:65`).
   - Text editor tool `skip_dialog` path now applies edits directly without opening diff UIs, keeping create/replace/insert tests stable (`packages/extension/src/tools/text_editor.ts:234`).
   - BiDi transport awaits Express shutdown and restarts cleanly during handover (`packages/extension/src/bidi-http-transport.ts:15`).
-- Evidence: `pnpm --filter "./packages/extension" test` → 35 passing, 0 failing (12:29 UTC).
+- 2025-10-15 12:47 UTC follow-up:
+  - Ensured `insert` operations honour `skip_dialog` by writing via `workspace.fs` before diff setup (`packages/extension/src/tools/text_editor.ts:330`).
+  - Local VS Code integration tests green after fix (`pnpm --filter "./packages/extension" test` → 35 passing, 0 failing).
+- Evidence: `pnpm --filter "./packages/extension" test` → 35 passing, 0 failing (12:47 UTC).
 - Next Opportunities:
   1. Review whether `restartDelayMs` should be configurable for production deployments.
   2. Assess terminal shell integration warnings (`no_shell_integration`) for non-integrated shells.
